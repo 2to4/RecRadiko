@@ -254,7 +254,7 @@ class TestCLIIntegration(unittest.TestCase):
         
         # プログラム情報管理のモック
         cli.program_info_manager = Mock()
-        cli.program_info_manager.get_program_guide.return_value = [self.mock_program]
+        cli.program_info_manager.fetch_program_guide.return_value = [self.mock_program]
         
         # 番組一覧表示
         with redirect_stdout(io.StringIO()) as captured_output:
@@ -262,7 +262,7 @@ class TestCLIIntegration(unittest.TestCase):
         
         # 結果検証
         self.assertEqual(exit_code, 0, "list-programsコマンドが成功する必要があります")
-        cli.program_info_manager.get_program_guide.assert_called_once()
+        cli.program_info_manager.fetch_program_guide.assert_called_once()
         
         # 出力内容の確認
         output = captured_output.getvalue()

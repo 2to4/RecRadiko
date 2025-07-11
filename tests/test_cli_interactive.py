@@ -195,7 +195,7 @@ class TestCLIInteractiveMode(unittest.TestCase):
                 performers=["DJ B", "ゲスト C"]
             )
         ]
-        self.mock_program_info.get_program_guide.return_value = mock_programs
+        self.mock_program_info.fetch_program_guide.return_value = mock_programs
         
         with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
             result = self.cli._execute_interactive_command(['list-programs', '--station', 'TBS'])
@@ -207,7 +207,7 @@ class TestCLIInteractiveMode(unittest.TestCase):
             self.assertIn("ニュース番組", output)
             self.assertIn("音楽番組", output)
             self.assertIn("アナウンサーA", output)
-            self.mock_program_info.get_program_guide.assert_called_once()
+            self.mock_program_info.fetch_program_guide.assert_called_once()
     
     def test_interactive_schedule_command(self):
         """対話型スケジュールコマンドのテスト"""

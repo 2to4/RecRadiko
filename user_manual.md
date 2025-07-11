@@ -124,15 +124,15 @@ python RecRadiko.py record QRR 30 --format mp3 --bitrate 192
 
 ```bash
 # 対話型モード内で
-RecRadiko> list-programs
-RecRadiko> list-programs --station TBS
+RecRadiko> list-programs TBS
+RecRadiko> list-programs TBS --date 2024-01-01
 
 # または一回だけ実行
-python RecRadiko.py list-programs
-python RecRadiko.py list-programs --date 2024-01-01 --station TBS
+python RecRadiko.py list-programs TBS
+python RecRadiko.py list-programs TBS --date 2024-01-01
 
 # 詳細ログ付きで実行（問題解決時）
-RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py list-programs
+RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py list-programs TBS
 ```
 
 ### 予約録音
@@ -162,8 +162,6 @@ python RecRadiko.py list-schedules
 python RecRadiko.py list-schedules --status active
 python RecRadiko.py list-schedules --station TBS
 python RecRadiko.py remove-schedule <スケジュールID>
-python RecRadiko.py pause-schedule <スケジュールID>
-python RecRadiko.py resume-schedule <スケジュールID>
 ```
 
 ## ⚙️ 設定
@@ -278,38 +276,19 @@ python RecRadiko.py --daemon
 
 # 設定ファイルを指定
 python RecRadiko.py --daemon --config /path/to/config.json
-
-# PIDファイルを指定
-python RecRadiko.py --daemon --pid-file /var/run/recradiko.pid
-```
-
-### デーモンの制御
-
-```bash
-# ステータス確認
-python RecRadiko.py daemon-status
-
-# 停止
-python RecRadiko.py daemon-stop
-
-# 再起動
-python RecRadiko.py daemon-restart
-
-# ログ監視
-python RecRadiko.py daemon-logs --follow
 ```
 
 ### デーモン監視
 
 ```bash
-# システム統計
-python RecRadiko.py system-status
+# システム状態確認
+python RecRadiko.py status
 
-# 録音状況確認
-python RecRadiko.py list-active-recordings
+# 統計情報
+python RecRadiko.py stats
 
-# ヘルスチェック
-python RecRadiko.py health-check
+# 録音ファイル一覧
+python RecRadiko.py list-recordings
 ```
 
 ## 📊 統計とモニタリング
@@ -317,96 +296,40 @@ python RecRadiko.py health-check
 ### 録音統計
 
 ```bash
-# 基本統計
+# 統計情報表示
 python RecRadiko.py stats
-
-# 詳細統計
-python RecRadiko.py stats --detailed
-
-# 期間指定統計
-python RecRadiko.py stats --from 2024-01-01 --to 2024-01-31
-
-# 放送局別統計
-python RecRadiko.py stats --station TBS
 ```
 
 ### システム監視
 
 ```bash
-# リアルタイム監視
-python RecRadiko.py monitor
+# システム状態確認
+python RecRadiko.py status
 
-# CPU・メモリ使用量
-python RecRadiko.py system-info
-
-# ディスク使用量
-python RecRadiko.py disk-usage
-
-# ネットワーク状態
-python RecRadiko.py network-status
+# 設定確認
+python RecRadiko.py show-config
 ```
 
-### エラー監視
-
-```bash
-# エラー一覧
-python RecRadiko.py list-errors
-
-# エラー詳細
-python RecRadiko.py error-details <エラーID>
-
-# エラー統計
-python RecRadiko.py error-stats
-```
 
 ## 🗂️ ファイル管理
 
 ### ファイル操作
 
 ```bash
-# ファイル一覧
-python RecRadiko.py list-files
+# 録音ファイル一覧
+python RecRadiko.py list-recordings
 
-# 検索
-python RecRadiko.py search-files "ニュース"
-python RecRadiko.py search-files --station TBS --date 2024-01-01
+# 放送局でフィルター
+python RecRadiko.py list-recordings --station TBS
 
-# メタデータ表示
-python RecRadiko.py file-info <ファイルパス>
+# 日付でフィルター
+python RecRadiko.py list-recordings --date 2024-01-01
 
-# ファイル検証
-python RecRadiko.py verify-files
+# 番組名で検索
+python RecRadiko.py list-recordings --search "ニュース"
 ```
 
-### 自動クリーンアップ
 
-```bash
-# 手動クリーンアップ
-python RecRadiko.py cleanup
-
-# 古いファイル削除（30日以上）
-python RecRadiko.py cleanup --days 30
-
-# 大きなファイル削除（100MB以上）
-python RecRadiko.py cleanup --size 100MB
-
-# ディスク容量確保（10GB確保）
-python RecRadiko.py cleanup --free-space 10GB
-```
-
-### メタデータ管理
-
-```bash
-# メタデータ再構築
-python RecRadiko.py rebuild-metadata
-
-# メタデータエクスポート
-python RecRadiko.py export-metadata --format json
-python RecRadiko.py export-metadata --format csv
-
-# メタデータ修復
-python RecRadiko.py repair-metadata
-```
 
 ## 🔧 トラブルシューティング
 
@@ -430,14 +353,11 @@ python -c "from src.logging_config import is_test_mode, is_console_output_enable
 
 #### 認証エラー
 ```bash
-# 認証状況確認
-python RecRadiko.py auth-status
+# 放送局一覧で認証確認
+python RecRadiko.py list-stations
 
-# 認証情報削除（再認証）
-python RecRadiko.py reset-auth
-
-# プレミアム認証テスト
-python RecRadiko.py test-premium-auth
+# システム状態確認
+python RecRadiko.py status
 ```
 
 #### 録音エラー
@@ -445,39 +365,33 @@ python RecRadiko.py test-premium-auth
 # FFmpeg確認
 ffmpeg -version
 
-# ストリーミングテスト
-python RecRadiko.py test-stream TBS
-
-# 録音テスト
-python RecRadiko.py test-record TBS 1
+# 実際の録音テスト（1分間）
+python RecRadiko.py record TBS 1
 ```
 
 #### ネットワークエラー
 ```bash
-# 接続テスト
-python RecRadiko.py test-connection
+# 放送局一覧で接続確認
+python RecRadiko.py list-stations
 
 # DNS確認
 nslookup radiko.jp
 
-# ネットワーク診断
-python RecRadiko.py network-diagnostic
+# 手動ping確認
+ping radiko.jp
 ```
 
-### 診断コマンド
+### 基本診断
 
 ```bash
-# 総合診断
-python RecRadiko.py diagnose
+# 設定表示
+python RecRadiko.py show-config
 
-# 設定確認
-python RecRadiko.py config-check
+# システム状態確認
+python RecRadiko.py status
 
-# 依存関係確認
-python RecRadiko.py check-dependencies
-
-# システム要件確認
-python RecRadiko.py system-check
+# 統計情報確認
+python RecRadiko.py stats
 ```
 
 ## 🔧 高度な使い方

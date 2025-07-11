@@ -230,13 +230,13 @@ class TestRecRadikoCLI(unittest.TestCase):
             )
         ]
         
-        self.mock_program_info.get_program_guide.return_value = mock_programs
+        self.mock_program_info.fetch_program_guide.return_value = mock_programs
         
         with redirect_stdout(io.StringIO()) as captured_output:
             exit_code = self.cli.run(['list-programs', 'TBS', '--date', '2024-01-01'])
         
         self.assertEqual(exit_code, 0)
-        self.mock_program_info.get_program_guide.assert_called_once()
+        self.mock_program_info.fetch_program_guide.assert_called_once()
         output = captured_output.getvalue()
         self.assertIn("テスト番組1", output)
     
@@ -541,7 +541,7 @@ class TestCLICommands(unittest.TestCase):
             )
         ]
         
-        self.mock_program_info.get_program_guide.return_value = mock_programs
+        self.mock_program_info.fetch_program_guide.return_value = mock_programs
         
         class MockArgs:
             station_id = "TBS"
@@ -553,7 +553,7 @@ class TestCLICommands(unittest.TestCase):
             result = self.cli._cmd_list_programs(args)
         
         self.assertEqual(result, 0)
-        self.mock_program_info.get_program_guide.assert_called_once()
+        self.mock_program_info.fetch_program_guide.assert_called_once()
         
         output = captured_output.getvalue()
         self.assertIn("元日番組", output)

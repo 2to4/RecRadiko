@@ -554,6 +554,11 @@ class RecRadikoCLI:
                 notes=args.notes or ""
             )
             
+            # add_scheduleが失敗した場合の処理
+            if not schedule_id:
+                print(f"予約エラー: 録音予約の追加に失敗しました")
+                return 1
+            
             print(f"録音予約を追加しました: {schedule_id}")
             print(f"番組: {args.program_title}")
             print(f"放送局: {args.station_id}")
@@ -600,7 +605,7 @@ class RecRadikoCLI:
             else:
                 date = datetime.now()
             
-            programs = self.program_info_manager.get_program_guide(args.station_id, date)
+            programs = self.program_info_manager.fetch_program_guide(date, args.station_id)
             
             print(f"{args.station_id} 番組表 ({date.strftime('%Y-%m-%d')})")
             print("-" * 70)
