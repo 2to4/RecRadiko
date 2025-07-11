@@ -1,0 +1,111 @@
+version: '3.8'
+
+# 実際のRadiko APIを使用するE2Eテスト専用のDocker Compose設定
+# 通常のE2Eテスト環境とは分離して実行
+
+services:
+  # 実際のRadiko APIを使用するE2Eテスト実行環境
+  recradiko-real-api-e2e:
+    build:
+      context: ../../
+      dockerfile: tests/e2e/Dockerfile
+    container_name: recradiko_real_api_e2e_runner
+    volumes:
+      - ../../:/app
+      - real_api_test_data:/app/test_data
+      - real_api_logs:/app/logs
+      - real_api_cache:/app/cache
+    environment:
+      - E2E_TEST_MODE=real_api
+      - LOG_LEVEL=DEBUG
+      - PYTHONPATH=/app
+      # 実際のAPIを使用するため、SKIP_REAL_API_TESTSは設定しない
+      - RADIKO_AREA_ID=JP14
+      - TEST_TIMEOUT=300
+    networks:
+      - real_api_network
+    depends_on:
+      - real-api-monitor
+    command: >
+      bash -c "
+        echo '🌐 実際のRadiko APIを使用するE2Eテスト実行環境準備中...' &&
+        echo '⚠️  このテストは実際のRadiko APIを呼び出します' &&
+        echo '⚠️  API利用規約を遵守して実行してください' &&
+        echo '📅 実行開始: $(date)' &&
+        python -m pytest tests/e2e/test_real_api.py -v --tb=short &&
+        echo '✅ 実際のRadiko APIテスト完了: $(date)'
+      "
+
+  # 実際のAPIテスト監視・メトリクス収集
+  real-api-monitor:
+    image: prom/prometheus:latest
+    container_name: recradiko_real_api_monitor
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus-real-api.yml:/etc/prometheus/prometheus.yml
+      - prometheus_real_api_data:/prometheus
+    networks:
+      - real_api_network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+
+  # 実際のAPIテスト結果ダッシュボード
+  real-api-dashboard:
+    image: grafana/grafana:latest
+    container_name: recradiko_real_api_dashboard
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=realapi
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/real-api-dashboard.json
+    volumes:
+      - grafana_real_api_data:/var/lib/grafana
+      - ./monitoring/grafana/real-api-dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - real_api_network
+    depends_on:
+      - real-api-monitor
+
+  # テスト結果アーカイブ
+  real-api-archiver:
+    image: alpine:latest
+    container_name: recradiko_real_api_archiver
+    volumes:
+      - real_api_logs:/logs
+      - real_api_test_data:/test_data
+      - ./archives:/archives
+    networks:
+      - real_api_network
+    command: >
+      sh -c "
+        echo '📦 テスト結果アーカイブ作成中...' &&
+        mkdir -p /archives/$(date +%Y%m%d_%H%M%S) &&
+        cp -r /logs/* /archives/$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true &&
+        cp -r /test_data/* /archives/$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true &&
+        echo '✅ テスト結果アーカイブ作成完了' &&
+        sleep 3600
+      "
+
+volumes:
+  real_api_test_data:
+    driver: local
+  real_api_logs:
+    driver: local
+  real_api_cache:
+    driver: local
+  prometheus_real_api_data:
+    driver: local
+  grafana_real_api_data:
+    driver: local
+
+networks:
+  real_api_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16

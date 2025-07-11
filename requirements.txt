@@ -1,0 +1,96 @@
+# RecRadiko 依存関係リスト
+
+# HTTP通信
+requests>=2.31.0
+
+# XML解析
+lxml>=4.9.0
+
+# HLS/M3U8処理
+m3u8>=3.5.0
+
+# 音声処理
+ffmpeg-python>=0.2.0
+
+# 暗号化
+cryptography>=41.0.0
+
+# スケジューリング
+APScheduler>=3.10.0
+
+# 日時処理
+pytz>=2023.3
+
+# データベース
+# sqlite3 is included in Python standard library
+
+# 音声メタデータ
+mutagen>=1.47.0
+
+# システム監視
+psutil>=5.9.0
+
+# 通知機能（オプション）
+plyer>=2.1.0
+
+# 開発・テスト用依存関係（オプション）
+pytest>=7.4.0
+pytest-cov>=4.1.0
+coverage>=7.3.0
+black>=23.7.0
+flake8>=6.0.0
+mypy>=1.5.0
+
+# テスト用追加ライブラリ
+# unittest.mock is included in Python 3.3+ standard library
+
+# ログ処理
+# logging is included in Python standard library
+
+# パス操作
+# pathlib is included in Python standard library
+
+# 並行処理
+# threading and queue are included in Python standard library
+
+# JSON処理
+# json is included in Python standard library
+
+# 正規表現
+# re is included in Python standard library
+
+# 時間処理
+# time and datetime are included in Python standard library
+
+# システム操作
+# os and sys are included in Python standard library
+
+# ハッシュ計算
+# hashlib is included in Python standard library
+
+# Base64エンコード
+# base64 is included in Python standard library
+
+# 一時ファイル
+# tempfile is included in Python standard library
+
+# シグナル処理
+# signal is included in Python standard library
+
+# CSV処理
+# csv is included in Python standard library
+
+# UUID生成
+# uuid is included in Python standard library
+
+# メール送信
+# smtplib and email are included in Python standard library
+
+# コマンドライン引数解析
+# argparse is included in Python standard library
+
+# プロセス管理
+# subprocess is included in Python standard library
+
+# コピー処理
+# shutil is included in Python standard library

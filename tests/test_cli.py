@@ -1,0 +1,716 @@
+"""
+CLIモジュールの単体テスト（再設計版）
+実際のCLI実装に基づいたテスト
+"""
+
+import unittest
+import tempfile
+import sys
+import io
+import json
+import argparse
+from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime, timedelta
+from contextlib import redirect_stdout, redirect_stderr
+from pathlib import Path
+
+from src.cli import RecRadikoCLI
+from src.auth import AuthInfo
+from src.program_info import Station, Program
+from src.recording import RecordingJob, RecordingStatus
+from src.scheduler import RecordingSchedule, RepeatPattern, ScheduleStatus
+
+
+class TestRecRadikoCLI(unittest.TestCase):
+    """RecRadikoCLI クラスのテスト（再設計版）"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        
+        # モックオブジェクトの作成
+        self.mock_auth = Mock()
+        self.mock_program_info = Mock()
+        self.mock_streaming = Mock()
+        self.mock_recording = Mock()
+        self.mock_file_manager = Mock()
+        self.mock_scheduler = Mock()
+        self.mock_error_handler = Mock()
+        
+        # テスト用設定ファイルを作成
+        test_config = {
+            "area_id": "JP13",
+            "premium_username": "",
+            "premium_password": "",
+            "output_dir": f"{self.temp_dir}/recordings",
+            "default_format": "aac",
+            "default_bitrate": 128,
+            "max_concurrent_recordings": 4,
+            "auto_cleanup_enabled": True,
+            "retention_days": 30,
+            "min_free_space_gb": 10.0,
+            "notification_enabled": True,
+            "log_level": "INFO",
+            "log_file": f"{self.temp_dir}/test.log"
+        }
+        
+        config_file = f"{self.temp_dir}/test_config.json"
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(test_config, f)
+        
+        # CLIインスタンスの作成（依存性注入）
+        self.cli = RecRadikoCLI(
+            config_file=config_file,
+            auth_manager=self.mock_auth,
+            program_info_manager=self.mock_program_info,
+            streaming_manager=self.mock_streaming,
+            recording_manager=self.mock_recording,
+            file_manager=self.mock_file_manager,
+            scheduler=self.mock_scheduler,
+            error_handler=self.mock_error_handler
+        )
+    
+    def tearDown(self):
+        """テスト後のクリーンアップ"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_cli_creation(self):
+        """RecRadikoCLI の作成テスト"""
+        self.assertIsInstance(self.cli, RecRadikoCLI)
+        self.assertEqual(self.cli.auth_manager, self.mock_auth)
+        self.assertEqual(self.cli.program_info_manager, self.mock_program_info)
+        self.assertEqual(self.cli.streaming_manager, self.mock_streaming)
+        self.assertEqual(self.cli.recording_manager, self.mock_recording)
+        self.assertEqual(self.cli.file_manager, self.mock_file_manager)
+        self.assertEqual(self.cli.scheduler, self.mock_scheduler)
+        self.assertEqual(self.cli.error_handler, self.mock_error_handler)
+    
+    def test_create_parser(self):
+        """引数パーサー作成のテスト"""
+        parser = self.cli.create_parser()
+        
+        self.assertIsInstance(parser, argparse.ArgumentParser)
+        self.assertEqual(parser.prog, 'RecRadiko')
+        
+        # ヘルプテキストに主要コマンドが含まれることを確認
+        help_text = parser.format_help()
+        self.assertIn('record', help_text)
+        self.assertIn('schedule', help_text)
+        self.assertIn('list-stations', help_text)
+    
+    def test_parser_record_command(self):
+        """recordコマンドの引数解析テスト"""
+        parser = self.cli.create_parser()
+        
+        # 正常なrecordコマンド
+        args = parser.parse_args(['record', 'TBS', '60'])
+        self.assertEqual(args.command, 'record')
+        self.assertEqual(args.station_id, 'TBS')
+        self.assertEqual(args.duration, 60)
+        
+        # オプション付きrecordコマンド
+        args = parser.parse_args(['record', 'TBS', '60', '--format', 'mp3', '--bitrate', '192'])
+        self.assertEqual(args.format, 'mp3')
+        self.assertEqual(args.bitrate, 192)
+    
+    def test_parser_schedule_command(self):
+        """scheduleコマンドの引数解析テスト"""
+        parser = self.cli.create_parser()
+        
+        args = parser.parse_args([
+            'schedule', 'TBS', '番組名', 
+            '2024-01-01T20:00', '2024-01-01T21:00'
+        ])
+        
+        self.assertEqual(args.command, 'schedule')
+        self.assertEqual(args.station_id, 'TBS')
+        self.assertEqual(args.program_title, '番組名')
+        self.assertEqual(args.start_time, '2024-01-01T20:00')
+        self.assertEqual(args.end_time, '2024-01-01T21:00')
+    
+    def test_parser_list_stations_command(self):
+        """list-stationsコマンドの引数解析テスト"""
+        parser = self.cli.create_parser()
+        
+        args = parser.parse_args(['list-stations'])
+        self.assertEqual(args.command, 'list-stations')
+    
+    def test_parser_invalid_command(self):
+        """無効なコマンドのテスト"""
+        parser = self.cli.create_parser()
+        
+        with self.assertRaises(SystemExit):
+            parser.parse_args(['invalid-command'])
+    
+    def test_run_record_command(self):
+        """recordコマンド実行のテスト"""
+        # 録音ジョブをモック
+        mock_job = RecordingJob(
+            id="test_job_001",
+            station_id="TBS",
+            program_title="即時録音",
+            start_time=datetime.now(),
+            end_time=datetime.now() + timedelta(minutes=60),
+            output_path="/tmp/test_recording.aac",
+            status=RecordingStatus.PENDING
+        )
+        
+        self.mock_recording.create_recording_job.return_value = mock_job
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['record', 'TBS', '60'])
+        
+        self.assertEqual(exit_code, 0)
+        self.mock_recording.create_recording_job.assert_called_once()
+        output = captured_output.getvalue()
+        self.assertIn("録音を開始しました", output)
+    
+    def test_run_schedule_command(self):
+        """scheduleコマンド実行のテスト"""
+        # スケジュール追加成功をモック
+        self.mock_scheduler.add_schedule.return_value = True
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run([
+                'schedule', 'TBS', '番組名', 
+                '2024-01-01T20:00', '2024-01-01T21:00'
+            ])
+        
+        self.assertEqual(exit_code, 0)
+        self.mock_scheduler.add_schedule.assert_called_once()
+        output = captured_output.getvalue()
+        self.assertIn("録音予約を追加", output)
+    
+    def test_run_list_stations_command(self):
+        """list-stationsコマンド実行のテスト"""
+        # 放送局リストをモック
+        mock_stations = [
+            Station(
+                id="TBS",
+                name="TBSラジオ",
+                area_id="JP13",
+                ascii_name="TBS",
+                logo_url="https://radiko.jp/res/images/TBS_logo.png"
+            ),
+            Station(
+                id="QRR",
+                name="文化放送",
+                area_id="JP13", 
+                ascii_name="QRR",
+                logo_url="https://radiko.jp/res/images/QRR_logo.png"
+            )
+        ]
+        
+        self.mock_program_info.fetch_station_list.return_value = mock_stations
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['list-stations'])
+        
+        self.assertEqual(exit_code, 0)
+        self.mock_program_info.fetch_station_list.assert_called_once()
+        output = captured_output.getvalue()
+        self.assertIn("TBS", output)
+        self.assertIn("QRR", output)
+    
+    def test_run_list_programs_command(self):
+        """list-programsコマンド実行のテスト"""
+        # 番組リストをモック
+        mock_programs = [
+            Program(
+                id="TBS_20240101_2000",
+                title="テスト番組1",
+                start_time=datetime(2024, 1, 1, 20, 0, 0),
+                end_time=datetime(2024, 1, 1, 21, 0, 0),
+                duration=60,
+                station_id="TBS",
+                performers=["出演者1"],
+                description="テスト番組の説明",
+                genre="音楽"
+            )
+        ]
+        
+        self.mock_program_info.get_program_guide.return_value = mock_programs
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['list-programs', 'TBS', '--date', '2024-01-01'])
+        
+        self.assertEqual(exit_code, 0)
+        self.mock_program_info.get_program_guide.assert_called_once()
+        output = captured_output.getvalue()
+        self.assertIn("テスト番組1", output)
+    
+    def test_run_list_schedules_command(self):
+        """list-schedulesコマンド実行のテスト"""
+        # スケジュールリストをモック
+        mock_schedules = [
+            RecordingSchedule(
+                schedule_id="schedule_001",
+                station_id="TBS",
+                program_title="定期番組1",
+                start_time=datetime(2024, 1, 1, 20, 0, 0),
+                end_time=datetime(2024, 1, 1, 21, 0, 0),
+                repeat_pattern=RepeatPattern.WEEKLY,
+                status=ScheduleStatus.SCHEDULED
+            )
+        ]
+        
+        self.mock_scheduler.list_schedules.return_value = mock_schedules
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['list-schedules'])
+        
+        self.assertEqual(exit_code, 0)
+        self.mock_scheduler.list_schedules.assert_called_once()
+        output = captured_output.getvalue()
+        self.assertIn("定期番組1", output)
+    
+    def test_run_remove_schedule_command(self):
+        """remove-scheduleコマンド実行のテスト"""
+        # スケジュール削除成功をモック
+        self.mock_scheduler.remove_schedule.return_value = True
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['remove-schedule', 'schedule_001'])
+        
+        self.assertEqual(exit_code, 0)
+        self.mock_scheduler.remove_schedule.assert_called_once_with('schedule_001')
+        output = captured_output.getvalue()
+        self.assertIn("スケジュールを削除", output)
+    
+    def test_run_remove_schedule_failure(self):
+        """remove-scheduleコマンド失敗のテスト"""
+        # スケジュール削除失敗をモック
+        self.mock_scheduler.remove_schedule.return_value = False
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['remove-schedule', 'nonexistent'])
+        
+        self.assertEqual(exit_code, 1)
+        output = captured_output.getvalue()
+        self.assertIn("スケジュールが見つかりません", output)
+    
+    def test_run_show_config_command(self):
+        """show-configコマンド実行のテスト"""
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['show-config'])
+        
+        self.assertEqual(exit_code, 0)
+        output = captured_output.getvalue()
+        self.assertIn("area_id", output)
+        self.assertIn("output_dir", output)
+    
+    def test_run_status_command(self):
+        """statusコマンド実行のテスト"""
+        # 各種ステータス情報をモック
+        self.mock_recording.list_jobs.return_value = []
+        self.mock_scheduler.get_next_schedules.return_value = []
+        
+        from src.file_manager import StorageInfo
+        mock_storage = StorageInfo(
+            total_space=1000000000,
+            used_space=400000000,
+            free_space=600000000,
+            recording_files_size=200000000,
+            file_count=50
+        )
+        self.mock_file_manager.get_storage_info.return_value = mock_storage
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['status'])
+        
+        self.assertEqual(exit_code, 0)
+        output = captured_output.getvalue()
+        self.assertIn("録音状況", output)
+        self.assertIn("ストレージ", output)
+    
+    def test_run_with_invalid_args(self):
+        """無効な引数でのテスト"""
+        with redirect_stderr(io.StringIO()) as captured_error:
+            try:
+                exit_code = self.cli.run(['invalid-command'])
+            except SystemExit as e:
+                exit_code = e.code
+        
+        self.assertEqual(exit_code, 2)  # argparseのエラー
+    
+    def test_run_with_exception(self):
+        """例外発生時のテスト"""
+        # 録音マネージャーで例外を発生させる
+        self.mock_recording.create_recording_job.side_effect = Exception("Test exception")
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            exit_code = self.cli.run(['record', 'TBS', '60'])
+        
+        self.assertEqual(exit_code, 1)
+        output = captured_output.getvalue()
+        self.assertIn("エラー", output)
+    
+    def test_config_loading(self):
+        """設定ファイル読み込みのテスト"""
+        # テスト用設定ファイルを作成
+        test_config = {
+            "area_id": "JP27",
+            "output_dir": "/tmp/recordings",
+            "default_format": "mp3"
+        }
+        
+        config_file = Path(self.temp_dir) / "test_config.json"
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(test_config, f)
+        
+        # 新しいCLIインスタンスで設定読み込み
+        cli = RecRadikoCLI(config_file=str(config_file))
+        
+        self.assertEqual(cli.config["area_id"], "JP27")
+        self.assertEqual(cli.config["output_dir"], "/tmp/recordings")
+        self.assertEqual(cli.config["default_format"], "mp3")
+    
+    def test_config_saving(self):
+        """設定ファイル保存のテスト"""
+        # 設定を変更
+        self.cli.config["area_id"] = "JP14"
+        self.cli.config["output_dir"] = "/new/path"
+        
+        # 設定を保存
+        self.cli._save_config(self.cli.config)
+        
+        # 設定ファイルが更新されることを確認
+        self.assertTrue(self.cli.config_path.exists())
+        
+        with open(self.cli.config_path, 'r', encoding='utf-8') as f:
+            saved_config = json.load(f)
+        
+        self.assertEqual(saved_config["area_id"], "JP14")
+        self.assertEqual(saved_config["output_dir"], "/new/path")
+    
+    def test_daemon_mode_flag(self):
+        """デーモンモードフラグのテスト"""
+        parser = self.cli.create_parser()
+        
+        # デーモンモードフラグ
+        args = parser.parse_args(['--daemon'])
+        self.assertTrue(args.daemon)
+        
+        # 通常モード
+        args = parser.parse_args(['list-stations'])
+        self.assertFalse(args.daemon)
+    
+    @patch('src.cli.RecRadikoCLI._run_daemon')
+    def test_daemon_mode_execution(self, mock_run_daemon):
+        """デーモンモード実行のテスト"""
+        mock_run_daemon.return_value = None
+        
+        exit_code = self.cli.run(['--daemon'])
+        
+        self.assertEqual(exit_code, 0)
+        mock_run_daemon.assert_called_once()
+    
+    def test_verbose_mode(self):
+        """詳細モードのテスト"""
+        parser = self.cli.create_parser()
+        
+        # 詳細モード
+        args = parser.parse_args(['--verbose', 'list-stations'])
+        self.assertTrue(args.verbose)
+        
+        # 短縮形
+        args = parser.parse_args(['-v', 'list-stations'])
+        self.assertTrue(args.verbose)
+        
+        # 通常モード
+        args = parser.parse_args(['list-stations'])
+        self.assertFalse(args.verbose)
+
+
+class TestCLICommands(unittest.TestCase):
+    """CLIコマンド個別テスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        
+        # モックオブジェクトの作成
+        self.mock_auth = Mock()
+        self.mock_program_info = Mock()
+        self.mock_streaming = Mock()
+        self.mock_recording = Mock()
+        self.mock_file_manager = Mock()
+        self.mock_scheduler = Mock()
+        self.mock_error_handler = Mock()
+        
+        self.cli = RecRadikoCLI(
+            config_file=f"{self.temp_dir}/test_config.json",
+            auth_manager=self.mock_auth,
+            program_info_manager=self.mock_program_info,
+            streaming_manager=self.mock_streaming,
+            recording_manager=self.mock_recording,
+            file_manager=self.mock_file_manager,
+            scheduler=self.mock_scheduler,
+            error_handler=self.mock_error_handler
+        )
+    
+    def tearDown(self):
+        """テスト後のクリーンアップ"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_cmd_record_with_options(self):
+        """recordコマンドのオプション処理テスト"""
+        # 録音ジョブをモック
+        mock_job = RecordingJob(
+            id="test_job_002",
+            station_id="QRR",
+            program_title="カスタム録音",
+            start_time=datetime.now(),
+            end_time=datetime.now() + timedelta(minutes=30),
+            output_path="/tmp/custom_output.mp3",
+            status=RecordingStatus.PENDING
+        )
+        
+        self.mock_recording.create_recording_job.return_value = mock_job
+        
+        # 模擬args作成
+        class MockArgs:
+            station_id = "QRR"
+            duration = 30
+            format = "mp3"
+            bitrate = 192
+            output = "/tmp/custom_output.mp3"
+        
+        args = MockArgs()
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._cmd_record(args)
+        
+        self.assertEqual(result, 0)
+        self.mock_recording.create_recording_job.assert_called_once()
+        
+        # 呼び出された引数を確認
+        call_args = self.mock_recording.create_recording_job.call_args
+        self.assertEqual(call_args[1]['station_id'], 'QRR')
+        self.assertEqual(call_args[1]['format'], 'mp3')
+        self.assertEqual(call_args[1]['bitrate'], 192)
+    
+    def test_cmd_schedule_with_repeat(self):
+        """scheduleコマンドの繰り返し処理テスト"""
+        self.mock_scheduler.add_schedule.return_value = True
+        
+        class MockArgs:
+            station_id = "TBS"
+            program_title = "週間番組"
+            start_time = "2024-01-01T20:00"
+            end_time = "2024-01-01T21:00"
+            repeat = "weekly"
+            repeat_end = "2024-12-31"
+            format = "aac"
+            bitrate = 128
+            notes = "毎週録音"
+        
+        args = MockArgs()
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._cmd_schedule(args)
+        
+        self.assertEqual(result, 0)
+        self.mock_scheduler.add_schedule.assert_called_once()
+        
+        # スケジュール追加の引数確認
+        call_args = self.mock_scheduler.add_schedule.call_args
+        call_kwargs = call_args.kwargs if call_args.kwargs else {}
+        
+        # 引数の確認（位置引数または名前付き引数を確認）
+        if 'repeat_pattern' in call_kwargs:
+            self.assertEqual(call_kwargs['repeat_pattern'], RepeatPattern.WEEKLY)
+        if 'program_title' in call_kwargs:
+            self.assertEqual(call_kwargs['program_title'], "週間番組")
+    
+    def test_cmd_list_programs_with_date(self):
+        """list-programsコマンドの日付指定テスト"""
+        mock_programs = [
+            Program(
+                id="TBS_20240101_2000",
+                title="元日番組",
+                start_time=datetime(2024, 1, 1, 20, 0, 0),
+                end_time=datetime(2024, 1, 1, 22, 0, 0),
+                duration=120,  # 分単位
+                station_id="TBS",
+                performers=["司会者"],
+                description="元日特別番組",
+                genre="バラエティ"
+            )
+        ]
+        
+        self.mock_program_info.get_program_guide.return_value = mock_programs
+        
+        class MockArgs:
+            station_id = "TBS"
+            date = "2024-01-01"
+        
+        args = MockArgs()
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._cmd_list_programs(args)
+        
+        self.assertEqual(result, 0)
+        self.mock_program_info.get_program_guide.assert_called_once()
+        
+        output = captured_output.getvalue()
+        self.assertIn("元日番組", output)
+        self.assertIn("2024-01-01", output)
+    
+    def test_schedule_command_positional_args(self):
+        """scheduleコマンドの位置引数テスト"""
+        # 修正後のadd_scheduleメソッドで位置引数が正しく処理されることを確認
+        self.mock_scheduler.add_schedule.return_value = "test_schedule_id"
+        
+        class MockArgs:
+            station_id = "TBS"
+            program_title = "位置引数テスト"
+            start_time = "2024-01-01T20:00"
+            end_time = "2024-01-01T21:00"
+            repeat = None
+            repeat_end = None
+            format = "aac"
+            bitrate = 128
+            notes = "位置引数テスト"
+        
+        args = MockArgs()
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._cmd_schedule(args)
+        
+        self.assertEqual(result, 0)
+        self.mock_scheduler.add_schedule.assert_called_once()
+        
+        # 呼び出し引数の確認
+        call_args = self.mock_scheduler.add_schedule.call_args
+        
+        # 最初の引数（位置引数）がstation_idであることを確認
+        self.assertEqual(call_args[0][0], "TBS")
+        
+        # キーワード引数の確認
+        call_kwargs = call_args.kwargs if call_args.kwargs else {}
+        self.assertEqual(call_kwargs.get('program_title'), "位置引数テスト")
+        self.assertEqual(call_kwargs.get('format'), "aac")
+        self.assertEqual(call_kwargs.get('bitrate'), 128)
+        self.assertEqual(call_kwargs.get('notes'), "位置引数テスト")
+        
+        # 出力の確認
+        output = captured_output.getvalue()
+        self.assertIn("録音予約を追加しました", output)
+        self.assertIn("位置引数テスト", output)
+        self.assertIn("TBS", output)
+    
+    def test_schedule_command_with_repeat_pattern(self):
+        """scheduleコマンドの繰り返しパターンテスト"""
+        self.mock_scheduler.add_schedule.return_value = "test_schedule_id_repeat"
+        
+        class MockArgs:
+            station_id = "QRR"
+            program_title = "繰り返しテスト"
+            start_time = "2024-01-01T18:00"
+            end_time = "2024-01-01T19:00"
+            repeat = "daily"
+            repeat_end = "2024-01-31"
+            format = "mp3"
+            bitrate = 192
+            notes = "毎日録音"
+        
+        args = MockArgs()
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._cmd_schedule(args)
+        
+        self.assertEqual(result, 0)
+        self.mock_scheduler.add_schedule.assert_called_once()
+        
+        # 呼び出し引数の確認
+        call_args = self.mock_scheduler.add_schedule.call_args
+        
+        # 最初の引数（位置引数）がstation_idであることを確認
+        self.assertEqual(call_args[0][0], "QRR")
+        
+        # キーワード引数の確認
+        call_kwargs = call_args.kwargs if call_args.kwargs else {}
+        self.assertEqual(call_kwargs.get('program_title'), "繰り返しテスト")
+        self.assertEqual(call_kwargs.get('format'), "mp3")
+        self.assertEqual(call_kwargs.get('bitrate'), 192)
+        self.assertEqual(call_kwargs.get('notes'), "毎日録音")
+        
+        # 繰り返しパターンの確認
+        self.assertEqual(call_kwargs.get('repeat_pattern'), RepeatPattern.DAILY)
+        
+        # 繰り返し終了日の確認
+        repeat_end_date = call_kwargs.get('repeat_end_date')
+        self.assertIsNotNone(repeat_end_date)
+        self.assertEqual(repeat_end_date.year, 2024)
+        self.assertEqual(repeat_end_date.month, 1)
+        self.assertEqual(repeat_end_date.day, 31)
+        
+        # 出力の確認
+        output = captured_output.getvalue()
+        self.assertIn("録音予約を追加しました", output)
+        self.assertIn("繰り返しテスト", output)
+        self.assertIn("QRR", output)
+    
+    def test_schedule_command_error_handling(self):
+        """scheduleコマンドのエラーハンドリングテスト"""
+        # add_scheduleが失敗した場合
+        self.mock_scheduler.add_schedule.return_value = False
+        
+        class MockArgs:
+            station_id = "INVALID"
+            program_title = "エラーテスト"
+            start_time = "2024-01-01T20:00"
+            end_time = "2024-01-01T21:00"
+            repeat = None
+            repeat_end = None
+            format = "aac"
+            bitrate = 128
+            notes = ""
+        
+        args = MockArgs()
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._cmd_schedule(args)
+        
+        # エラーが発生した場合の戻り値確認
+        self.assertEqual(result, 1)
+        
+        # エラーメッセージの確認
+        output = captured_output.getvalue()
+        self.assertIn("予約エラー", output)
+    
+    def test_schedule_command_exception_handling(self):
+        """scheduleコマンドの例外処理テスト"""
+        # add_scheduleで例外が発生した場合
+        self.mock_scheduler.add_schedule.side_effect = Exception("スケジュールエラー")
+        
+        class MockArgs:
+            station_id = "TBS"
+            program_title = "例外テスト"
+            start_time = "2024-01-01T20:00"
+            end_time = "2024-01-01T21:00"
+            repeat = None
+            repeat_end = None
+            format = "aac"
+            bitrate = 128
+            notes = ""
+        
+        args = MockArgs()
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._cmd_schedule(args)
+        
+        # 例外が発生した場合の戻り値確認
+        self.assertEqual(result, 1)
+        
+        # エラーメッセージの確認
+        output = captured_output.getvalue()
+        self.assertIn("予約エラー", output)
+        self.assertIn("スケジュールエラー", output)
+
+
+if __name__ == '__main__':
+    unittest.main()

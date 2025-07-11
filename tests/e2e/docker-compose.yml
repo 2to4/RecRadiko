@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  # E2Eテスト実行環境
+  recradiko-e2e:
+    build:
+      context: ../../
+      dockerfile: tests/e2e/Dockerfile
+    container_name: recradiko_e2e_runner
+    volumes:
+      - ../../:/app
+      - e2e_test_data:/app/test_data
+      - e2e_logs:/app/logs
+      - e2e_cache:/app/cache
+    environment:
+      - E2E_TEST_MODE=true
+      - TIME_ACCELERATION=100
+      - LOG_LEVEL=DEBUG
+      - PYTHONPATH=/app
+      - SKIP_REAL_API_TESTS=1
+    networks:
+      - e2e_network
+    depends_on:
+      - mock-radiko-api
+      - test-monitor
+    command: >
+      bash -c "
+        echo 'E2Eテスト環境準備中...' &&
+        python -m pytest tests/e2e/test_framework.py -v &&
+        echo 'E2Eテストフレームワーク検証完了'
+      "
+
+  # Radiko APIモックサーバー
+  mock-radiko-api:
+    build:
+      context: tests/e2e/mock_services
+      dockerfile: Dockerfile.mock-api
+    container_name: recradiko_mock_api
+    ports:
+      - "8080:8080"
+    environment:
+      - MOCK_MODE=full
+      - STATION_COUNT=50
+      - PROGRAM_DAYS=30
+    networks:
+      - e2e_network
+    volumes:
+      - mock_api_data:/app/data
+
+  # テスト監視・メトリクス収集
+  test-monitor:
+    image: prom/prometheus:latest
+    container_name: recradiko_test_monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - e2e_network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+
+  # Grafana ダッシュボード
+  test-dashboard:
+    image: grafana/grafana:latest
+    container_name: recradiko_test_dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=e2etest
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - e2e_network
+    depends_on:
+      - test-monitor
+
+  # ネットワーク遅延・障害シミュレータ
+  network-simulator:
+    image: nicolaka/netshoot:latest
+    container_name: recradiko_network_sim
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - e2e_network
+    command: >
+      bash -c "
+        echo 'ネットワークシミュレータ起動中...' &&
+        # 基本的なネットワーク遅延設定
+        tc qdisc add dev eth0 root netem delay 50ms &&
+        echo 'ネットワーク遅延シミュレータ準備完了' &&
+        sleep infinity
+      "
+
+  # データベース（大量データテスト用）
+  test-database:
+    image: postgres:13
+    container_name: recradiko_test_db
+    environment:
+      - POSTGRES_DB=recradiko_test
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./test_data/sql:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - e2e_network
+
+  # Redis（キャッシュテスト用）
+  test-cache:
+    image: redis:7-alpine
+    container_name: recradiko_test_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - e2e_network
+    command: redis-server --appendonly yes
+
+volumes:
+  e2e_test_data:
+    driver: local
+  e2e_logs:
+    driver: local
+  e2e_cache:
+    driver: local
+  mock_api_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  e2e_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
