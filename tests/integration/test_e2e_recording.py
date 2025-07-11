@@ -136,6 +136,11 @@ class TestEndToEndRecording(unittest.TestCase):
             mock_load_config.return_value = self.test_config
             
             cli = RecRadikoCLI()
+            
+            # 遅延初期化メソッドをモック
+            cli._ensure_recording_manager_initialized = Mock()
+            cli._ensure_streaming_manager_initialized = Mock()
+            
             # 依存関係を注入してテスト環境を構築
             cli.authenticator = Mock()
             cli.authenticator.authenticate.return_value = self.mock_auth_info
@@ -147,6 +152,11 @@ class TestEndToEndRecording(unittest.TestCase):
             
             cli.recording_manager = Mock()
             cli.recording_manager.create_recording_job.return_value = mock_job
+            cli.recording_manager.schedule_recording.return_value = None
+            cli.recording_manager.get_job_status.return_value = None  # テスト時に進捗監視をスキップ
+            
+            # テスト環境フラグを設定
+            cli._all_components_injected = True
             
             cli.file_manager = Mock()
             cli.file_manager.register_file.return_value = mock_metadata

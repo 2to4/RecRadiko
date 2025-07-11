@@ -298,7 +298,8 @@ class TestRecordingScheduler(unittest.TestCase):
         self.assertIsInstance(self.scheduler, RecordingScheduler)
         self.assertEqual(self.scheduler.max_concurrent_recordings, 2)
         self.assertEqual(len(self.scheduler.schedules), 0)
-        self.assertTrue(self.scheduler.is_running)
+        # 遅延初期化により、最初は起動していない
+        self.assertFalse(self.scheduler.is_running)
     
     def test_add_schedule(self):
         """スケジュール追加のテスト"""
@@ -732,6 +733,158 @@ class TestRecordingScheduler(unittest.TestCase):
         
         self.assertEqual(len(exported_data), 1)
         self.assertEqual(exported_data[0]['program_title'], "エクスポートテスト")
+
+
+class TestRecordingSchedulerLazyInitialization(unittest.TestCase):
+    """RecordingScheduler 遅延初期化とプロセス終了のテスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = f"{self.temp_dir}/test_scheduler.db"
+    
+    @patch('src.scheduler.BackgroundScheduler')
+    def test_scheduler_not_started_on_init(self, mock_bg_scheduler_class):
+        """初期化時にスケジューラーが自動起動されないことをテスト"""
+        mock_scheduler = Mock()
+        mock_bg_scheduler_class.return_value = mock_scheduler
+        
+        # RecordingSchedulerを作成
+        scheduler = RecordingScheduler(db_path=self.db_path)
+        
+        # BackgroundSchedulerが作成されるが、startは呼ばれない
+        mock_bg_scheduler_class.assert_called_once()
+        mock_scheduler.start.assert_not_called()
+        
+        # is_runningがFalseであることを確認
+        self.assertFalse(scheduler.is_running)
+    
+    @patch('src.scheduler.BackgroundScheduler')
+    def test_ensure_scheduler_running(self, mock_bg_scheduler_class):
+        """_ensure_scheduler_runningメソッドのテスト"""
+        mock_scheduler = Mock()
+        mock_bg_scheduler_class.return_value = mock_scheduler
+        
+        scheduler = RecordingScheduler(db_path=self.db_path)
+        
+        # 初期状態では起動していない
+        self.assertFalse(scheduler.is_running)
+        
+        # _ensure_scheduler_runningを呼び出し
+        scheduler._ensure_scheduler_running()
+        
+        # スケジューラーが起動されることを確認
+        mock_scheduler.start.assert_called_once()
+        self.assertTrue(scheduler.is_running)
+        
+        # 2回目の呼び出しでは再起動されないことを確認
+        scheduler._ensure_scheduler_running()
+        mock_scheduler.start.assert_called_once()  # 呼び出し回数は1回のまま
+    
+    @patch('src.scheduler.BackgroundScheduler')
+    def test_add_schedule_triggers_scheduler_start(self, mock_bg_scheduler_class):
+        """add_scheduleがスケジューラーの起動をトリガーすることをテスト"""
+        mock_scheduler = Mock()
+        mock_bg_scheduler_class.return_value = mock_scheduler
+        
+        scheduler = RecordingScheduler(db_path=self.db_path)
+        
+        # 初期状態では起動していない
+        self.assertFalse(scheduler.is_running)
+        
+        # スケジュールを追加
+        start_time = datetime.now() + timedelta(hours=1)
+        end_time = start_time + timedelta(hours=1)
+        
+        schedule_id = scheduler.add_schedule(
+            "TBS",  # 第1引数として station_id を渡す
+            program_title="遅延初期化テスト",
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        # スケジューラーが起動されることを確認
+        mock_scheduler.start.assert_called_once()
+        self.assertTrue(scheduler.is_running)
+        
+        # スケジュールが追加されることを確認
+        self.assertIsNotNone(schedule_id)
+    
+    @patch('src.scheduler.BackgroundScheduler')
+    def test_shutdown_with_not_running_scheduler(self, mock_bg_scheduler_class):
+        """起動していないスケジューラーのshutdownテスト"""
+        mock_scheduler = Mock()
+        mock_scheduler.running = False
+        mock_scheduler.state = 0  # STATE_STOPPED
+        mock_bg_scheduler_class.return_value = mock_scheduler
+        
+        scheduler = RecordingScheduler(db_path=self.db_path)
+        
+        # shutdownを呼び出し（例外が発生しないことを確認）
+        try:
+            scheduler.shutdown()
+        except Exception as e:
+            self.fail(f"shutdown時に予期しない例外が発生: {e}")
+        
+        # スケジューラーのshutdownが呼ばれないことを確認
+        mock_scheduler.shutdown.assert_not_called()
+    
+    @patch('src.scheduler.BackgroundScheduler')
+    def test_shutdown_with_running_scheduler(self, mock_bg_scheduler_class):
+        """起動中のスケジューラーのshutdownテスト"""
+        mock_scheduler = Mock()
+        mock_scheduler.running = True
+        mock_scheduler.state = 1  # STATE_RUNNING
+        mock_bg_scheduler_class.return_value = mock_scheduler
+        
+        scheduler = RecordingScheduler(db_path=self.db_path)
+        
+        # スケジューラーを起動状態にする
+        scheduler._ensure_scheduler_running()
+        
+        # shutdownを呼び出し
+        scheduler.shutdown()
+        
+        # スケジューラーのshutdownが呼ばれることを確認
+        mock_scheduler.shutdown.assert_called_once()
+        self.assertFalse(scheduler.is_running)
+    
+    @patch('src.scheduler.BackgroundScheduler')
+    def test_shutdown_with_scheduler_error(self, mock_bg_scheduler_class):
+        """スケジューラーshutdown時のエラーハンドリングテスト"""
+        mock_scheduler = Mock()
+        mock_scheduler.running = True
+        mock_scheduler.state = 1  # STATE_RUNNING
+        mock_scheduler.shutdown.side_effect = Exception("Scheduler shutdown error")
+        mock_bg_scheduler_class.return_value = mock_scheduler
+        
+        scheduler = RecordingScheduler(db_path=self.db_path)
+        
+        # スケジューラーを起動状態にする
+        scheduler._ensure_scheduler_running()
+        
+        # shutdownでエラーが発生しても例外が伝播しないことを確認
+        try:
+            scheduler.shutdown()
+        except Exception as e:
+            self.fail(f"shutdown時に予期しない例外が発生: {e}")
+        
+        # is_runningがFalseに設定されることを確認
+        self.assertFalse(scheduler.is_running)
+    
+    def test_scheduler_without_apscheduler(self):
+        """APSchedulerがない環境でのテスト"""
+        with patch('src.scheduler.BackgroundScheduler', None):
+            scheduler = RecordingScheduler(db_path=self.db_path)
+            
+            # schedulerがNoneに設定されることを確認
+            self.assertIsNone(scheduler.scheduler)
+            
+            # shutdownが例外なく実行されることを確認
+            try:
+                scheduler.shutdown()
+            except Exception as e:
+                self.fail(f"shutdown時に予期しない例外が発生: {e}")
 
 
 if __name__ == '__main__':

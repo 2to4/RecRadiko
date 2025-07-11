@@ -198,11 +198,10 @@ class RecRadikoCLI:
                 self.program_manager = self.program_info_manager
             
             # ストリーミング管理（依存性注入されていない場合のみ）
+            # 実際にストリーミングが必要になるまで遅延初期化
             if self.streaming_manager is None:
-                self.streaming_manager = StreamingManager(
-                    authenticator=self.authenticator,
-                    max_workers=self.config.get('max_concurrent_recordings', 4)
-                )
+                # ストリーミング管理は実際に必要時に初期化
+                pass
             
             # ファイル管理（依存性注入されていない場合のみ）
             if self.file_manager is None:
@@ -214,23 +213,19 @@ class RecRadikoCLI:
                 )
             
             # 録音管理（依存性注入されていない場合のみ）
+            # 実際に録音が必要になるまで遅延初期化
             if self.recording_manager is None:
-                self.recording_manager = RecordingManager(
-                    authenticator=self.authenticator,
-                    program_manager=self.program_manager,
-                    streaming_manager=self.streaming_manager,
-                    output_dir=self.config.get('output_dir', './recordings'),
-                    max_concurrent_jobs=self.config.get('max_concurrent_recordings', 4)
-                )
+                # 録音管理は実際に録音時に初期化
+                pass
             
             # スケジューラー（依存性注入されていない場合のみ）
+            # 対話型モードでは通常不要なので、遅延初期化とする
             if self.scheduler is None:
-                self.scheduler = RecordingScheduler(
-                    max_concurrent_recordings=self.config.get('max_concurrent_recordings', 4)
-                )
+                # スケジューラーは実際に必要になるまで初期化しない
+                pass
             
             # コールバック設定（実際のインスタンスの場合のみ）
-            if hasattr(self.scheduler, 'set_recording_callback'):
+            if self.scheduler and hasattr(self.scheduler, 'set_recording_callback'):
                 self.scheduler.set_recording_callback(self._on_scheduled_recording)
             
             self.logger.info("コンポーネント初期化完了")
@@ -240,6 +235,56 @@ class RecRadikoCLI:
             if self.error_handler:
                 handle_error(e)
             sys.exit(1)
+    
+    def _ensure_scheduler_initialized(self):
+        """スケジューラーが必要な時に初期化"""
+        if self.scheduler is None:
+            try:
+                from src.scheduler import RecordingScheduler
+                self.scheduler = RecordingScheduler(
+                    max_concurrent_recordings=self.config.get('max_concurrent_recordings', 4)
+                )
+                # コールバック設定
+                if hasattr(self.scheduler, 'set_recording_callback'):
+                    self.scheduler.set_recording_callback(self._on_scheduled_recording)
+                self.logger.info("スケジューラーを初期化しました")
+            except Exception as e:
+                self.logger.error(f"スケジューラー初期化エラー: {e}")
+                raise
+    
+    def _ensure_recording_manager_initialized(self):
+        """録音管理が必要な時に初期化"""
+        if self.recording_manager is None:
+            try:
+                # 依存するストリーミング管理を先に初期化
+                self._ensure_streaming_manager_initialized()
+                
+                from src.recording import RecordingManager
+                self.recording_manager = RecordingManager(
+                    authenticator=self.authenticator,
+                    program_manager=self.program_manager,
+                    streaming_manager=self.streaming_manager,
+                    output_dir=self.config.get('output_dir', './recordings'),
+                    max_concurrent_jobs=self.config.get('max_concurrent_recordings', 4)
+                )
+                self.logger.info("録音管理を初期化しました")
+            except Exception as e:
+                self.logger.error(f"録音管理初期化エラー: {e}")
+                raise
+    
+    def _ensure_streaming_manager_initialized(self):
+        """ストリーミング管理が必要な時に初期化"""
+        if self.streaming_manager is None:
+            try:
+                from src.streaming import StreamingManager
+                self.streaming_manager = StreamingManager(
+                    authenticator=self.authenticator,
+                    max_workers=self.config.get('max_concurrent_recordings', 4)
+                )
+                self.logger.info("ストリーミング管理を初期化しました")
+            except Exception as e:
+                self.logger.error(f"ストリーミング管理初期化エラー: {e}")
+                raise
     
     def _on_scheduled_recording(self, schedule):
         """スケジュール録音コールバック"""
@@ -268,15 +313,57 @@ class RecRadikoCLI:
         """リソースのクリーンアップ"""
         try:
             if self.recording_manager:
-                self.recording_manager.shutdown()
+                try:
+                    self.recording_manager.shutdown()
+                except Exception as e:
+                    self.logger.debug(f"録音管理のクリーンアップエラー: {e}")
+            
             if self.scheduler:
-                self.scheduler.shutdown()
+                try:
+                    self.scheduler.shutdown()
+                except Exception as e:
+                    self.logger.debug(f"スケジューラーのクリーンアップエラー: {e}")
+            
             if self.file_manager:
-                self.file_manager.shutdown()
+                try:
+                    self.file_manager.shutdown()
+                except Exception as e:
+                    self.logger.debug(f"ファイル管理のクリーンアップエラー: {e}")
+            
             if self.error_handler:
-                self.error_handler.shutdown()
+                try:
+                    self.error_handler.shutdown()
+                except Exception as e:
+                    self.logger.debug(f"エラーハンドラーのクリーンアップエラー: {e}")
         except Exception as e:
+            # 最後の手段としてprintを使用（loggerが利用できない場合）
             print(f"クリーンアップエラー: {e}")
+        finally:
+            pass
+            
+            # ログハンドラーをクリーンアップ
+            try:
+                import logging
+                logging.shutdown()
+            except:
+                pass
+            
+            # 最後の手段：残りのスレッドを強制終了
+            try:
+                import threading
+                import time
+                
+                # 少し待って、残りのスレッドが自然終了するのを待つ
+                time.sleep(0.1)
+                
+                # まだアクティブなスレッドがあるかチェック
+                active_threads = threading.active_count()
+                if active_threads > 1:
+                    # プロセス終了を強制（メッセージなし）
+                    import os
+                    os._exit(0)
+            except:
+                pass
     
     def create_parser(self) -> argparse.ArgumentParser:
         """コマンドライン引数パーサーを作成（対話型モード専用）"""
@@ -367,6 +454,9 @@ class RecRadikoCLI:
         print(f"録音開始: {args.station_id} ({args.duration}分)")
         
         try:
+            # 録音管理が必要な時に初期化
+            self._ensure_recording_manager_initialized()
+            
             # 現在時刻から録音時間を計算
             now = datetime.now()
             end_time = now + timedelta(minutes=args.duration)
@@ -429,6 +519,9 @@ class RecRadikoCLI:
     def _cmd_schedule(self, args):
         """録音予約コマンド"""
         try:
+            # スケジューラーが必要な時に初期化
+            self._ensure_scheduler_initialized()
+            
             # 時刻解析
             start_time = datetime.fromisoformat(args.start_time)
             end_time = datetime.fromisoformat(args.end_time)
@@ -538,14 +631,17 @@ class RecRadikoCLI:
     def _cmd_list_schedules(self, args):
         """録音予約一覧コマンド"""
         try:
+            # スケジューラーが必要な時に初期化
+            self._ensure_scheduler_initialized()
+            
             # フィルター設定
             status_filter = None
-            if args.status:
+            if getattr(args, 'status', None):
                 status_filter = ScheduleStatus(args.status)
             
             schedules = self.scheduler.list_schedules(
                 status=status_filter,
-                station_id=args.station
+                station_id=getattr(args, 'station', None)
             )
             
             print(f"録音予約一覧 ({len(schedules)} 件)")
@@ -689,26 +785,32 @@ class RecRadikoCLI:
     def _cmd_status(self, args):
         """システム状態コマンド"""
         try:
-            print("システム状態:")
+            print("システム状況:")
             print("-" * 40)
             
             # 認証状態
             auth_status = "OK" if self.authenticator.is_authenticated() else "未認証"
             print(f"認証状態: {auth_status}")
             
-            # アクティブな録音
+            # アクティブな録音（遅延初期化対応）
             try:
-                active_jobs = self.recording_manager.list_jobs()
-                job_count = len(active_jobs) if hasattr(active_jobs, '__len__') else 0
-            except (TypeError, AttributeError):
+                if self.recording_manager:
+                    active_jobs = self.recording_manager.get_active_jobs()
+                    job_count = len(active_jobs) if active_jobs else 0
+                else:
+                    job_count = 0
+            except Exception:
                 job_count = 0
             print(f"録音状況: {job_count} 件のジョブ")
             
-            # スケジュール統計
+            # スケジュール統計（遅延初期化対応）
             try:
-                schedule_stats = self.scheduler.get_statistics()
-                active_count = schedule_stats.get('active_schedules', 0) if hasattr(schedule_stats, 'get') else 0
-            except (TypeError, AttributeError):
+                if self.scheduler:
+                    schedule_stats = self.scheduler.get_statistics()
+                    active_count = schedule_stats.get('active_schedules', 0) if schedule_stats else 0
+                else:
+                    active_count = 0
+            except Exception:
                 active_count = 0
             print(f"アクティブなスケジュール: {active_count} 件")
             
@@ -753,11 +855,21 @@ class RecRadikoCLI:
                     for station, stats in file_stats['stations'].items():
                         print(f"  {station}: {stats['count']} 件, {stats['duration'] / 3600:.1f} 時間")
             
-            # スケジュール統計
-            schedule_stats = self.scheduler.get_statistics()
-            print(f"\\n総スケジュール: {schedule_stats['total_schedules']} 件")
-            print(f"アクティブ: {schedule_stats['active_schedules']} 件")
-            print(f"完了: {schedule_stats['completed_schedules']} 件")
+            # スケジュール統計（遅延初期化対応）
+            try:
+                if self.scheduler:
+                    schedule_stats = self.scheduler.get_statistics()
+                    print(f"\\n総スケジュール: {schedule_stats['total_schedules']} 件")
+                    print(f"アクティブ: {schedule_stats['active_schedules']} 件")
+                    print(f"完了: {schedule_stats['completed_schedules']} 件")
+                else:
+                    print(f"\\n総スケジュール: 0 件")
+                    print(f"アクティブ: 0 件")
+                    print(f"完了: 0 件")
+            except Exception:
+                print(f"\\n総スケジュール: 0 件")
+                print(f"アクティブ: 0 件")
+                print(f"完了: 0 件")
             
             # エラー統計
             error_stats = self.error_handler.get_error_statistics()
@@ -795,7 +907,7 @@ class RecRadikoCLI:
                 # 終了コマンド
                 if user_input.lower() in ['exit', 'quit', 'q']:
                     print("RecRadikoを終了します")
-                    break
+                    return 0
                 
                 # ヘルプコマンド
                 if user_input.lower() in ['help', 'h', '?']:
@@ -817,12 +929,12 @@ class RecRadikoCLI:
                     
             except KeyboardInterrupt:
                 print("\nRecRadikoを終了します")
-                break
+                return 0
             except EOFError:
                 print("\nRecRadikoを終了します")
-                break
+                return 0
         
-        self._cleanup()
+        # 通常ここには到達しないが、念のため
         return 0
     
     def _print_interactive_help(self):

@@ -221,6 +221,13 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
     
     def test_interactive_list_schedules_integration(self):
         """録音予約一覧の統合テスト"""
+        # 遅延初期化メソッドをモック
+        self.cli._ensure_scheduler_initialized = Mock()
+        
+        # スケジューラーのモック設定
+        self.cli.scheduler = Mock()
+        self.cli.scheduler.list_schedules.return_value = []
+        
         with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
             result = self.cli._execute_interactive_command(['list-schedules'])
             output = mock_stdout.getvalue()
@@ -244,6 +251,17 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
     
     def test_interactive_stats_integration(self):
         """統計情報の統合テスト"""
+        # 遅延初期化メソッドをモック
+        self.cli._ensure_scheduler_initialized = Mock()
+        
+        # スケジューラーのモック設定
+        self.cli.scheduler = Mock()
+        self.cli.scheduler.get_statistics.return_value = {
+            'total_schedules': 0,
+            'active_schedules': 0,
+            'completed_schedules': 0
+        }
+        
         with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
             result = self.cli._execute_interactive_command(['stats'])
             output = mock_stdout.getvalue()
@@ -337,12 +355,12 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
         """対話型モードでのコンポーネント初期化テスト"""
         mock_input.side_effect = ['exit']
         
-        # 初期化前の状態確認
+        # 初期化前の状態確認（遅延初期化により一部はNone）
         self.assertIsNotNone(self.cli.auth_manager)
         self.assertIsNotNone(self.cli.program_info_manager)
-        self.assertIsNotNone(self.cli.recording_manager)
+        self.assertIsNone(self.cli.recording_manager)  # 遅延初期化によりNone
         self.assertIsNotNone(self.cli.file_manager)
-        self.assertIsNotNone(self.cli.scheduler)
+        self.assertIsNone(self.cli.scheduler)  # 遅延初期化によりNone
         self.assertIsNotNone(self.cli.error_handler)
         
         # 対話型モード実行

@@ -332,12 +332,12 @@ class RecordingScheduler:
         self.is_running = False
         self.timers: Dict[str, threading.Timer] = {}
         
-        # スケジューラー設定
+        # スケジューラー設定（遅延初期化）
         if BackgroundScheduler:
             self.scheduler = BackgroundScheduler()
             self.scheduler.add_listener(self._job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
-            self.scheduler.start()
-            self.is_running = True
+            # 実際に必要になるまで start() を呼ばない
+            self.is_running = False
         else:
             # 代替実装のためのタイマー管理
             self.scheduler = None
@@ -356,8 +356,23 @@ class RecordingScheduler:
         # スケジュールを読み込み
         self._load_schedules()
         
-        # アクティブなスケジュールを登録
-        self._register_active_schedules()
+        # アクティブなスケジュールの自動登録は、実際にスケジューラーが必要になった時に実行
+        # 対話型モードでは遅延実行
+    
+    def _ensure_scheduler_running(self):
+        """スケジューラーが動作していることを確認し、必要に応じて起動"""
+        if self.scheduler and not self.is_running:
+            try:
+                self.scheduler.start()
+                self.is_running = True
+                self.logger.info("スケジューラーを起動しました")
+                
+                # 初回起動時に既存のアクティブスケジュールを登録
+                self._register_active_schedules()
+                
+            except Exception as e:
+                self.logger.error(f"スケジューラー起動エラー: {e}")
+                raise SchedulerError(f"スケジューラーの起動に失敗しました: {e}")
     
     def _init_database(self):
         """データベースを初期化"""
@@ -557,6 +572,9 @@ class RecordingScheduler:
                     notes: str = "") -> Union[str, bool]:
         """録音スケジュールを追加"""
         
+        # スケジューラーが必要になった時点で起動
+        self._ensure_scheduler_running()
+        
         # RecordingScheduleオブジェクトが渡された場合
         if isinstance(schedule_or_station_id, RecordingSchedule):
             schedule = schedule_or_station_id
@@ -623,6 +641,8 @@ class RecordingScheduler:
             return
         
         if self.scheduler:
+            # スケジューラーが起動していることを確認
+            self._ensure_scheduler_running()
             # APSchedulerを使用
             self._register_apscheduler_jobs(schedule)
         else:
@@ -744,7 +764,11 @@ class RecordingScheduler:
         with self.lock:
             for schedule in self.schedules.values():
                 if schedule.status == ScheduleStatus.ACTIVE:
-                    self._register_schedule_jobs(schedule)
+                    # 直接登録（既にスケジューラーが起動していることが前提）
+                    if self.scheduler:
+                        self._register_apscheduler_jobs(schedule)
+                    else:
+                        self._register_timer_jobs(schedule)
     
     def _execute_recording(self, schedule_id: str):
         """録音を実行"""
@@ -1276,13 +1300,21 @@ class RecordingScheduler:
         self.logger.info("スケジューラーを終了中...")
         
         if self.scheduler:
-            self.scheduler.shutdown()
+            try:
+                # APSchedulerが動作している場合のみshutdownを呼ぶ
+                if hasattr(self.scheduler, 'running') and self.scheduler.running:
+                    self.scheduler.shutdown()
+                elif hasattr(self.scheduler, 'state') and self.scheduler.state == 1:  # STATE_RUNNING
+                    self.scheduler.shutdown()
+            except Exception as e:
+                self.logger.debug(f"スケジューラーshutdownエラー: {e}")
         
         # タイマーをキャンセル
         for timer in self.timers.values():
             timer.cancel()
         self.timers.clear()
         
+        self.is_running = False
         self.logger.info("スケジューラーを終了しました")
     
     def _reschedule_all(self):

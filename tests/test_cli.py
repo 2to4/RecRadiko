@@ -710,5 +710,285 @@ class TestCLICommands(unittest.TestCase):
         self.assertIn("スケジュールエラー", output)
 
 
+class TestRecRadikoCLILazyInitialization(unittest.TestCase):
+    """RecRadikoCLI 遅延初期化のテスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        
+        # テスト用設定ファイルを作成
+        test_config = {
+            "area_id": "JP13",
+            "output_dir": f"{self.temp_dir}/recordings",
+            "max_concurrent_recordings": 4
+        }
+        
+        self.config_path = Path(self.temp_dir) / "test_config.json"
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            json.dump(test_config, f, ensure_ascii=False, indent=2)
+    
+    def test_initial_components_not_created(self):
+        """初期化時にスケジューラーや録音管理が作成されないことをテスト"""
+        cli = RecRadikoCLI(config_path=str(self.config_path))
+        
+        # コンポーネント初期化を実行
+        cli._initialize_components()
+        
+        # 遅延初期化対象のコンポーネントがNoneであることを確認
+        self.assertIsNone(cli.scheduler)
+        self.assertIsNone(cli.recording_manager)
+        self.assertIsNone(cli.streaming_manager)
+        
+        # 必須コンポーネントは初期化されていることを確認
+        self.assertIsNotNone(cli.authenticator)
+        self.assertIsNotNone(cli.program_manager)
+        self.assertIsNotNone(cli.file_manager)
+        self.assertIsNotNone(cli.error_handler)
+    
+    def test_ensure_scheduler_initialized(self):
+        """スケジューラー遅延初期化のテスト"""
+        with patch('src.scheduler.RecordingScheduler') as mock_scheduler_class:
+            mock_scheduler = Mock()
+            mock_scheduler_class.return_value = mock_scheduler
+            
+            cli = RecRadikoCLI(config_path=str(self.config_path))
+            cli._initialize_components()
+            
+            # 初期状態ではスケジューラーがNone
+            self.assertIsNone(cli.scheduler)
+            
+            # 遅延初期化を実行
+            cli._ensure_scheduler_initialized()
+            
+            # スケジューラーが初期化されたことを確認
+            self.assertIsNotNone(cli.scheduler)
+            mock_scheduler_class.assert_called_once()
+            
+            # 2回目の呼び出しでは再初期化されないことを確認
+            cli._ensure_scheduler_initialized()
+            mock_scheduler_class.assert_called_once()  # 呼び出し回数は1回のまま
+    
+    def test_ensure_streaming_manager_initialized(self):
+        """ストリーミング管理遅延初期化のテスト"""
+        with patch('src.streaming.StreamingManager') as mock_streaming_class:
+            mock_streaming = Mock()
+            mock_streaming_class.return_value = mock_streaming
+            
+            cli = RecRadikoCLI(config_path=str(self.config_path))
+            cli._initialize_components()
+            
+            # 初期状態ではストリーミング管理がNone
+            self.assertIsNone(cli.streaming_manager)
+            
+            # 遅延初期化を実行
+            cli._ensure_streaming_manager_initialized()
+            
+            # ストリーミング管理が初期化されたことを確認
+            self.assertIsNotNone(cli.streaming_manager)
+            mock_streaming_class.assert_called_once()
+    
+    def test_ensure_recording_manager_initialized(self):
+        """録音管理遅延初期化のテスト"""
+        with patch('src.recording.RecordingManager') as mock_recording_class, \
+             patch('src.streaming.StreamingManager') as mock_streaming_class:
+            mock_streaming = Mock()
+            mock_recording = Mock()
+            mock_streaming_class.return_value = mock_streaming
+            mock_recording_class.return_value = mock_recording
+            
+            cli = RecRadikoCLI(config_path=str(self.config_path))
+            cli._initialize_components()
+            
+            # 初期状態では録音管理がNone
+            self.assertIsNone(cli.recording_manager)
+            
+            # 遅延初期化を実行
+            cli._ensure_recording_manager_initialized()
+            
+            # 録音管理が初期化されたことを確認
+            self.assertIsNotNone(cli.recording_manager)
+            mock_recording_class.assert_called_once()
+            
+            # 依存するストリーミング管理も初期化されることを確認
+            mock_streaming_class.assert_called_once()
+    
+    def test_schedule_command_triggers_lazy_initialization(self):
+        """scheduleコマンドがスケジューラーの遅延初期化をトリガーすることをテスト"""
+        with patch('src.scheduler.RecordingScheduler') as mock_scheduler_class:
+            mock_scheduler = Mock()
+            mock_scheduler.add_schedule.return_value = "test_schedule_id"
+            mock_scheduler_class.return_value = mock_scheduler
+            
+            cli = RecRadikoCLI(config_path=str(self.config_path))
+            cli._initialize_components()
+            
+            # 初期状態ではスケジューラーがNone
+            self.assertIsNone(cli.scheduler)
+            
+            # scheduleコマンドの引数を作成
+            class MockArgs:
+                station_id = "TBS"
+                program_title = "テスト番組"
+                start_time = "2024-01-01T20:00"
+                end_time = "2024-01-01T21:00"
+                repeat = None
+                repeat_end = None
+                format = "aac"
+                bitrate = 128
+                notes = ""
+            
+            args = MockArgs()
+            
+            with redirect_stdout(io.StringIO()):
+                result = cli._cmd_schedule(args)
+            
+            # スケジューラーが遅延初期化されたことを確認
+            self.assertIsNotNone(cli.scheduler)
+            mock_scheduler_class.assert_called_once()
+            
+            # スケジュール追加が呼ばれたことを確認
+            mock_scheduler.add_schedule.assert_called_once()
+            self.assertEqual(result, 0)
+    
+    def test_record_command_triggers_lazy_initialization(self):
+        """recordコマンドが録音管理の遅延初期化をトリガーすることをテスト"""
+        with patch('src.recording.RecordingManager') as mock_recording_class, \
+             patch('src.streaming.StreamingManager') as mock_streaming_class:
+            mock_streaming = Mock()
+            mock_recording = Mock()
+            mock_job = Mock()
+            mock_job.status = RecordingStatus.PENDING
+            mock_recording.create_recording_job.return_value = mock_job
+            
+            mock_streaming_class.return_value = mock_streaming
+            mock_recording_class.return_value = mock_recording
+            
+            cli = RecRadikoCLI(config_path=str(self.config_path))
+            cli._initialize_components()
+            
+            # 初期状態では録音管理がNone
+            self.assertIsNone(cli.recording_manager)
+            
+            # recordコマンドの引数を作成
+            class MockArgs:
+                station_id = "TBS"
+                duration = 60
+                format = "mp3"
+                bitrate = 128
+                output = None
+            
+            args = MockArgs()
+            
+            with redirect_stdout(io.StringIO()):
+                result = cli._cmd_record(args)
+            
+            # 録音管理が遅延初期化されたことを確認
+            self.assertIsNotNone(cli.recording_manager)
+            mock_recording_class.assert_called_once()
+            
+            # 依存するストリーミング管理も初期化されることを確認
+            mock_streaming_class.assert_called_once()
+            
+            self.assertEqual(result, 0)
+
+
+class TestRecRadikoCLIProcessTermination(unittest.TestCase):
+    """RecRadikoCLI プロセス終了のテスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        
+        test_config = {
+            "area_id": "JP13",
+            "output_dir": f"{self.temp_dir}/recordings"
+        }
+        
+        self.config_path = Path(self.temp_dir) / "test_config.json"
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            json.dump(test_config, f, ensure_ascii=False, indent=2)
+    
+    def test_cleanup_with_no_components(self):
+        """コンポーネントが初期化されていない状態でのクリーンアップテスト"""
+        cli = RecRadikoCLI(config_path=str(self.config_path))
+        
+        # コンポーネント初期化を実行（遅延初期化により一部コンポーネントはNone）
+        cli._initialize_components()
+        
+        # クリーンアップが例外なく実行されることを確認
+        try:
+            cli._cleanup()
+        except Exception as e:
+            self.fail(f"クリーンアップで予期しない例外が発生: {e}")
+    
+    def test_cleanup_with_scheduler_error(self):
+        """スケジューラークリーンアップでエラーが発生した場合のテスト"""
+        cli = RecRadikoCLI(config_path=str(self.config_path))
+        cli._initialize_components()
+        
+        # モックスケジューラーを設定（shutdownでエラーを発生）
+        mock_scheduler = Mock()
+        mock_scheduler.shutdown.side_effect = Exception("Scheduler shutdown error")
+        cli.scheduler = mock_scheduler
+        
+        # クリーンアップが例外なく完了することを確認
+        with redirect_stderr(io.StringIO()) as captured_stderr:
+            try:
+                cli._cleanup()
+            except Exception as e:
+                self.fail(f"クリーンアップで予期しない例外が発生: {e}")
+    
+    def test_cleanup_with_recording_manager_error(self):
+        """録音管理クリーンアップでエラーが発生した場合のテスト"""
+        cli = RecRadikoCLI(config_path=str(self.config_path))
+        cli._initialize_components()
+        
+        # モック録音管理を設定（shutdownでエラーを発生）
+        mock_recording = Mock()
+        mock_recording.shutdown.side_effect = Exception("Recording manager shutdown error")
+        cli.recording_manager = mock_recording
+        
+        # クリーンアップが例外なく完了することを確認
+        try:
+            cli._cleanup()
+        except Exception as e:
+            self.fail(f"クリーンアップで予期しない例外が発生: {e}")
+    
+    @patch('os._exit')
+    @patch('threading.active_count')
+    @patch('time.sleep')
+    def test_forced_process_termination(self, mock_sleep, mock_active_count, mock_exit):
+        """残留スレッドがある場合の強制終了テスト"""
+        cli = RecRadikoCLI(config_path=str(self.config_path))
+        cli._initialize_components()
+        
+        # 複数のアクティブスレッドがあることをシミュレート
+        mock_active_count.return_value = 3  # メインスレッド + 2つの残留スレッド
+        
+        # クリーンアップを実行
+        cli._cleanup()
+        
+        # 強制終了が呼ばれることを確認
+        mock_exit.assert_called_once_with(0)
+        mock_sleep.assert_called_once_with(0.1)
+    
+    @patch('os._exit')
+    @patch('threading.active_count')
+    def test_normal_process_termination(self, mock_active_count, mock_exit):
+        """残留スレッドがない場合の正常終了テスト"""
+        cli = RecRadikoCLI(config_path=str(self.config_path))
+        cli._initialize_components()
+        
+        # メインスレッドのみがアクティブ
+        mock_active_count.return_value = 1
+        
+        # クリーンアップを実行
+        cli._cleanup()
+        
+        # 強制終了が呼ばれないことを確認
+        mock_exit.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

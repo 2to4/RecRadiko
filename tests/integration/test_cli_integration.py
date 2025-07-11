@@ -86,6 +86,10 @@ class TestCLIIntegration(unittest.TestCase):
         # CLIインスタンス作成
         cli = RecRadikoCLI(config_path=self.config_path)
         
+        # 遅延初期化メソッドをモックして、事前に設定したモックが使われるようにする
+        cli._ensure_recording_manager_initialized = Mock()
+        cli._ensure_streaming_manager_initialized = Mock()
+        
         # 依存関係のモック
         cli.authenticator = Mock()
         cli.authenticator.authenticate.return_value = self.mock_auth_info
@@ -108,6 +112,11 @@ class TestCLIIntegration(unittest.TestCase):
             status=RecordingStatus.COMPLETED
         )
         cli.recording_manager.create_recording_job.return_value = mock_job
+        cli.recording_manager.schedule_recording.return_value = None
+        cli.recording_manager.get_job_status.return_value = None  # テスト時に進捗監視をスキップ
+        
+        # テスト環境フラグを設定
+        cli._all_components_injected = True
         
         cli.file_manager = Mock()
         mock_metadata = FileMetadata(

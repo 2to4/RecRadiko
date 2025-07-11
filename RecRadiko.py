@@ -3,20 +3,20 @@
 RecRadiko - Radikoの録音・録画を自動化するアプリケーション
 
 このファイルはRecRadikoのメインエントリーポイントです。
-コマンドライン引数に基づいて適切なモジュールを呼び出します。
+対話型モード専用アーキテクチャにより、すべての操作は対話型CLIで実行されます。
 
 使用例:
-    # 即座に録音
-    python RecRadiko.py record TBS 60
+    # 対話型モードで起動
+    python RecRadiko.py
     
-    # 録音予約
-    python RecRadiko.py schedule TBS "番組名" 2024-01-01T20:00 2024-01-01T21:00
+    # 設定ファイルを指定
+    python RecRadiko.py --config custom_config.json
     
-    # デーモンモード
+    # 詳細ログ出力
+    python RecRadiko.py --verbose
+    
+    # デーモンモード（バックグラウンド実行）
     python RecRadiko.py --daemon
-    
-    # 設定確認
-    python RecRadiko.py show-config
 
 作成者: Claude (Anthropic)
 バージョン: 1.0.0
@@ -53,17 +53,10 @@ def main():
             notification_enabled=True
         )
         
-        # コマンドライン引数をチェック
-        if len(sys.argv) > 1 and sys.argv[1] == '--daemon':
-            # デーモンモードで実行
-            print("RecRadiko デーモンモードで開始...")
-            
-            daemon = DaemonManager()
-            daemon.run()
-        else:
-            # CLIモードで実行
-            cli = RecRadikoCLI()
-            cli.run()
+        # 対話型モード専用実行
+        cli = RecRadikoCLI()
+        exit_code = cli.run()
+        sys.exit(exit_code)
     
     except KeyboardInterrupt:
         print("\n操作がキャンセルされました")
