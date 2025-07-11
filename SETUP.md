@@ -19,7 +19,7 @@
 
 ### 1. リポジトリのクローン
 ```bash
-git clone https://github.com/your-username/RecRadiko.git
+git clone https://github.com/2to4/RecRadiko.git
 cd RecRadiko
 ```
 

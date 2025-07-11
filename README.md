@@ -53,7 +53,7 @@ RecRadikoは、日本のインターネットラジオサービス「Radiko」�
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/your-username/RecRadiko.git
+git clone https://github.com/2to4/RecRadiko.git
 cd RecRadiko
 
 # 2. 依存関係をインストール
