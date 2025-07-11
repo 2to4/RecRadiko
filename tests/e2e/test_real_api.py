@@ -225,13 +225,13 @@ class TestRealRadikoAPI:
         assert auth_result is True, "認証が必要です"
         
         # CLI経由での放送局一覧取得
-        stations_result = self.cli.list_stations()
-        assert stations_result is True, "CLI放送局一覧取得が失敗しました"
+        stations_result = self.cli._execute_interactive_command(['list-stations'])
+        assert stations_result == 0, "CLI放送局一覧取得が失敗しました"
         
         # CLI経由での番組表取得
         today = datetime.now().strftime('%Y-%m-%d')
-        programs_result = self.cli.list_programs(date=today, station_id='TBS')
-        assert programs_result is True, "CLI番組表取得が失敗しました"
+        programs_result = self.cli._execute_interactive_command(['list-programs', '--station', 'TBS', '--date', today])
+        assert programs_result == 0, "CLI番組表取得が失敗しました"
         
         print("✅ CLI統合テスト成功")
     

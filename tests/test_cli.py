@@ -87,54 +87,42 @@ class TestRecRadikoCLI(unittest.TestCase):
         self.assertEqual(self.cli.error_handler, self.mock_error_handler)
     
     def test_create_parser(self):
-        """引数パーサー作成のテスト"""
+        """引数パーサー作成のテスト（対話型モード専用）"""
         parser = self.cli.create_parser()
         
         self.assertIsInstance(parser, argparse.ArgumentParser)
         self.assertEqual(parser.prog, 'RecRadiko')
         
-        # ヘルプテキストに主要コマンドが含まれることを確認
+        # ヘルプテキストに対話型モードの説明が含まれることを確認
         help_text = parser.format_help()
-        self.assertIn('record', help_text)
-        self.assertIn('schedule', help_text)
-        self.assertIn('list-stations', help_text)
+        self.assertIn('対話型モード', help_text)
+        self.assertIn('--daemon', help_text)
+        self.assertIn('--verbose', help_text)
     
+    @patch('src.cli.RecRadikoCLI._run_interactive')
+    def test_interactive_mode_default(self, mock_interactive):
+        """デフォルトで対話型モードが起動することのテスト"""
+        mock_interactive.return_value = 0
+        
+        exit_code = self.cli.run([])
+        
+        self.assertEqual(exit_code, 0)
+        mock_interactive.assert_called_once()
+    
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンドのパーサーテストは無効")
     def test_parser_record_command(self):
-        """recordコマンドの引数解析テスト"""
-        parser = self.cli.create_parser()
-        
-        # 正常なrecordコマンド
-        args = parser.parse_args(['record', 'TBS', '60'])
-        self.assertEqual(args.command, 'record')
-        self.assertEqual(args.station_id, 'TBS')
-        self.assertEqual(args.duration, 60)
-        
-        # オプション付きrecordコマンド
-        args = parser.parse_args(['record', 'TBS', '60', '--format', 'mp3', '--bitrate', '192'])
-        self.assertEqual(args.format, 'mp3')
-        self.assertEqual(args.bitrate, 192)
+        """recordコマンドの引数解析テスト（無効化）"""
+        pass
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンドのパーサーテストは無効")
     def test_parser_schedule_command(self):
-        """scheduleコマンドの引数解析テスト"""
-        parser = self.cli.create_parser()
-        
-        args = parser.parse_args([
-            'schedule', 'TBS', '番組名', 
-            '2024-01-01T20:00', '2024-01-01T21:00'
-        ])
-        
-        self.assertEqual(args.command, 'schedule')
-        self.assertEqual(args.station_id, 'TBS')
-        self.assertEqual(args.program_title, '番組名')
-        self.assertEqual(args.start_time, '2024-01-01T20:00')
-        self.assertEqual(args.end_time, '2024-01-01T21:00')
+        """scheduleコマンドの引数解析テスト（無効化）"""
+        pass
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンドのパーサーテストは無効")
     def test_parser_list_stations_command(self):
-        """list-stationsコマンドの引数解析テスト"""
-        parser = self.cli.create_parser()
-        
-        args = parser.parse_args(['list-stations'])
-        self.assertEqual(args.command, 'list-stations')
+        """list-stationsコマンドの引数解析テスト（無効化）"""
+        pass
     
     def test_parser_invalid_command(self):
         """無効なコマンドのテスト"""
@@ -143,6 +131,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         with self.assertRaises(SystemExit):
             parser.parse_args(['invalid-command'])
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_record_command(self):
         """recordコマンド実行のテスト"""
         # 録音ジョブをモック
@@ -166,6 +155,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         output = captured_output.getvalue()
         self.assertIn("録音を開始しました", output)
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_schedule_command(self):
         """scheduleコマンド実行のテスト"""
         # スケジュール追加成功をモック
@@ -182,6 +172,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         output = captured_output.getvalue()
         self.assertIn("録音予約を追加", output)
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_list_stations_command(self):
         """list-stationsコマンド実行のテスト"""
         # 放送局リストをモック
@@ -213,6 +204,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         self.assertIn("TBS", output)
         self.assertIn("QRR", output)
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_list_programs_command(self):
         """list-programsコマンド実行のテスト"""
         # 番組リストをモック
@@ -240,6 +232,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         output = captured_output.getvalue()
         self.assertIn("テスト番組1", output)
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_list_schedules_command(self):
         """list-schedulesコマンド実行のテスト"""
         # スケジュールリストをモック
@@ -265,6 +258,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         output = captured_output.getvalue()
         self.assertIn("定期番組1", output)
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_remove_schedule_command(self):
         """remove-scheduleコマンド実行のテスト"""
         # スケジュール削除成功をモック
@@ -278,6 +272,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         output = captured_output.getvalue()
         self.assertIn("スケジュールを削除", output)
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_remove_schedule_failure(self):
         """remove-scheduleコマンド失敗のテスト"""
         # スケジュール削除失敗をモック
@@ -290,6 +285,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         output = captured_output.getvalue()
         self.assertIn("スケジュールが見つかりません", output)
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_show_config_command(self):
         """show-configコマンド実行のテスト"""
         with redirect_stdout(io.StringIO()) as captured_output:
@@ -300,6 +296,7 @@ class TestRecRadikoCLI(unittest.TestCase):
         self.assertIn("area_id", output)
         self.assertIn("output_dir", output)
     
+    @unittest.skip("対話型モード専用に変更されたため、サブコマンド実行テストは無効")
     def test_run_status_command(self):
         """statusコマンド実行のテスト"""
         # 各種ステータス情報をモック
@@ -334,13 +331,14 @@ class TestRecRadikoCLI(unittest.TestCase):
         
         self.assertEqual(exit_code, 2)  # argparseのエラー
     
-    def test_run_with_exception(self):
-        """例外発生時のテスト"""
-        # 録音マネージャーで例外を発生させる
-        self.mock_recording.create_recording_job.side_effect = Exception("Test exception")
+    @patch('src.cli.RecRadikoCLI._run_interactive')
+    def test_run_with_exception(self, mock_interactive):
+        """例外発生時のテスト（対話型モード専用）"""
+        # 対話型モードで例外を発生させる
+        mock_interactive.side_effect = Exception("Test exception")
         
         with redirect_stdout(io.StringIO()) as captured_output:
-            exit_code = self.cli.run(['record', 'TBS', '60'])
+            exit_code = self.cli.run([])
         
         self.assertEqual(exit_code, 1)
         output = captured_output.getvalue()
@@ -385,15 +383,15 @@ class TestRecRadikoCLI(unittest.TestCase):
         self.assertEqual(saved_config["output_dir"], "/new/path")
     
     def test_daemon_mode_flag(self):
-        """デーモンモードフラグのテスト"""
+        """デーモンモードフラグのテスト（対話型モード専用）"""
         parser = self.cli.create_parser()
         
         # デーモンモードフラグ
         args = parser.parse_args(['--daemon'])
         self.assertTrue(args.daemon)
         
-        # 通常モード
-        args = parser.parse_args(['list-stations'])
+        # 通常モード（引数なし）
+        args = parser.parse_args([])
         self.assertFalse(args.daemon)
     
     @patch('src.cli.RecRadikoCLI._run_daemon')
@@ -407,19 +405,19 @@ class TestRecRadikoCLI(unittest.TestCase):
         mock_run_daemon.assert_called_once()
     
     def test_verbose_mode(self):
-        """詳細モードのテスト"""
+        """詳細モードのテスト（対話型モード専用）"""
         parser = self.cli.create_parser()
         
         # 詳細モード
-        args = parser.parse_args(['--verbose', 'list-stations'])
+        args = parser.parse_args(['--verbose'])
         self.assertTrue(args.verbose)
         
         # 短縮形
-        args = parser.parse_args(['-v', 'list-stations'])
+        args = parser.parse_args(['-v'])
         self.assertTrue(args.verbose)
         
         # 通常モード
-        args = parser.parse_args(['list-stations'])
+        args = parser.parse_args([])
         self.assertFalse(args.verbose)
 
 

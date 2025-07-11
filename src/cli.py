@@ -279,105 +279,38 @@ class RecRadikoCLI:
             print(f"クリーンアップエラー: {e}")
     
     def create_parser(self) -> argparse.ArgumentParser:
-        """コマンドライン引数パーサーを作成"""
+        """コマンドライン引数パーサーを作成（対話型モード専用）"""
         parser = argparse.ArgumentParser(
             prog='RecRadiko',
-            description='Radikoの録音・録画を自動化するアプリケーション',
+            description='Radikoの録音・録画を自動化するアプリケーション（対話型モード）',
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog="""
-使用例:
-  # 即座に録音
-  python RecRadiko.py record TBS 60
+使用方法:
+  python RecRadiko.py           # 対話型モードで起動
+  python RecRadiko.py --daemon  # デーモンモードで起動
   
-  # 録音予約
-  python RecRadiko.py schedule TBS "番組名" 2024-01-01T20:00 2024-01-01T21:00
-  
-  # デーモンモード
-  python RecRadiko.py --daemon
-  
-  # 設定確認
-  python RecRadiko.py show-config
+対話型モードでは以下のコマンドが利用可能です:
+  record <放送局ID> <時間(分)>  # 即座に録音開始
+  schedule <放送局ID> "<番組名>" <開始時刻> <終了時刻>  # 録音予約
+  list-stations                # 放送局一覧表示
+  list-programs <放送局ID>     # 番組表表示
+  list-schedules               # 録音予約一覧表示
+  status                       # システム状態表示
+  help                         # ヘルプ表示
+  exit                         # 終了
             """
         )
         
-        # グローバルオプション
+        # グローバルオプション（対話型モード専用に簡素化）
         parser.add_argument('--version', action='version', version=f'RecRadiko {self.VERSION}')
         parser.add_argument('--config', help='設定ファイルパス', default='config.json')
         parser.add_argument('--verbose', '-v', action='store_true', help='詳細ログを表示')
         parser.add_argument('--daemon', action='store_true', help='デーモンモードで実行')
-        parser.add_argument('--interactive', '-i', action='store_true', help='対話型モードで実行')
-        
-        # サブコマンド
-        subparsers = parser.add_subparsers(dest='command', help='利用可能なコマンド')
-        
-        # record コマンド
-        record_parser = subparsers.add_parser('record', help='即座に録音開始')
-        record_parser.add_argument('station_id', help='放送局ID (例: TBS, NHK-FM)')
-        record_parser.add_argument('duration', type=int, help='録音時間（分）')
-        record_parser.add_argument('--format', default='aac', choices=['aac', 'mp3', 'wav'], help='音声形式')
-        record_parser.add_argument('--bitrate', type=int, default=128, help='ビットレート')
-        record_parser.add_argument('--output', '-o', help='出力ファイルパス')
-        
-        # schedule コマンド
-        schedule_parser = subparsers.add_parser('schedule', help='録音予約')
-        schedule_parser.add_argument('station_id', help='放送局ID')
-        schedule_parser.add_argument('program_title', help='番組名')
-        schedule_parser.add_argument('start_time', help='開始時刻 (YYYY-MM-DDTHH:MM)')
-        schedule_parser.add_argument('end_time', help='終了時刻 (YYYY-MM-DDTHH:MM)')
-        schedule_parser.add_argument('--repeat', choices=['daily', 'weekly', 'weekdays', 'weekends', 'monthly'], help='繰り返しパターン')
-        schedule_parser.add_argument('--repeat-end', help='繰り返し終了日 (YYYY-MM-DD)')
-        schedule_parser.add_argument('--format', default='aac', choices=['aac', 'mp3', 'wav'], help='音声形式')
-        schedule_parser.add_argument('--bitrate', type=int, default=128, help='ビットレート')
-        schedule_parser.add_argument('--notes', help='メモ')
-        
-        # list-stations コマンド
-        list_stations_parser = subparsers.add_parser('list-stations', help='放送局一覧を表示')
-        list_stations_parser.add_argument('--area-id', help='エリアID')
-        
-        # list-programs コマンド
-        list_programs_parser = subparsers.add_parser('list-programs', help='番組表を表示')
-        list_programs_parser.add_argument('station_id', help='放送局ID')
-        list_programs_parser.add_argument('--date', help='日付 (YYYY-MM-DD)')
-        
-        # list-schedules コマンド
-        list_schedules_parser = subparsers.add_parser('list-schedules', help='録音予約一覧を表示')
-        list_schedules_parser.add_argument('--status', choices=['active', 'inactive', 'completed', 'cancelled'], help='ステータスでフィルター')
-        list_schedules_parser.add_argument('--station', help='放送局でフィルター')
-        
-        # remove-schedule コマンド
-        remove_schedule_parser = subparsers.add_parser('remove-schedule', help='録音予約を削除')
-        remove_schedule_parser.add_argument('schedule_id', help='スケジュールID')
-        
-        # list-recordings コマンド
-        list_recordings_parser = subparsers.add_parser('list-recordings', help='録音ファイル一覧を表示')
-        list_recordings_parser.add_argument('--station', help='放送局でフィルター')
-        list_recordings_parser.add_argument('--date', help='日付でフィルター (YYYY-MM-DD)')
-        list_recordings_parser.add_argument('--search', help='番組名で検索')
-        
-        # show-config コマンド
-        show_config_parser = subparsers.add_parser('show-config', help='設定を表示')
-        
-        # config コマンド
-        config_parser = subparsers.add_parser('config', help='設定を変更')
-        config_parser.add_argument('--area-id', help='エリアIDを設定')
-        config_parser.add_argument('--premium-user', help='プレミアム会員ユーザー名')
-        config_parser.add_argument('--premium-pass', help='プレミアム会員パスワード')
-        config_parser.add_argument('--output-dir', help='出力ディレクトリ')
-        config_parser.add_argument('--format', choices=['aac', 'mp3', 'wav'], help='デフォルト音声形式')
-        config_parser.add_argument('--bitrate', type=int, help='デフォルトビットレート')
-        config_parser.add_argument('--retention-days', type=int, help='ファイル保持期間')
-        config_parser.add_argument('--notification-enabled', type=bool, help='通知機能の有効/無効')
-        
-        # status コマンド
-        status_parser = subparsers.add_parser('status', help='システム状態を表示')
-        
-        # stats コマンド
-        stats_parser = subparsers.add_parser('stats', help='統計情報を表示')
         
         return parser
     
     def run(self, args: List[str] = None) -> int:
-        """CLIメインエントリーポイント"""
+        """CLIメインエントリーポイント（対話型モード専用）"""
         parser = self.create_parser()
         parsed_args = parser.parse_args(args)
         
@@ -395,40 +328,9 @@ class RecRadikoCLI:
             self._run_daemon()
             return 0
         
-        if parsed_args.interactive:
-            return self._run_interactive()
-        
-        # コンポーネント初期化（テスト時は注入されたコンポーネントを使用）
-        if not self._all_components_injected:
-            self._initialize_components()
-        
+        # デフォルトで対話型モードを開始
         try:
-            # コマンド実行
-            if parsed_args.command == 'record':
-                return self._cmd_record(parsed_args)
-            elif parsed_args.command == 'schedule':
-                return self._cmd_schedule(parsed_args)
-            elif parsed_args.command == 'list-stations':
-                return self._cmd_list_stations(parsed_args)
-            elif parsed_args.command == 'list-programs':
-                return self._cmd_list_programs(parsed_args)
-            elif parsed_args.command == 'list-schedules':
-                return self._cmd_list_schedules(parsed_args)
-            elif parsed_args.command == 'remove-schedule':
-                return self._cmd_remove_schedule(parsed_args)
-            elif parsed_args.command == 'list-recordings':
-                return self._cmd_list_recordings(parsed_args)
-            elif parsed_args.command == 'show-config':
-                return self._cmd_show_config(parsed_args)
-            elif parsed_args.command == 'config':
-                return self._cmd_config(parsed_args)
-            elif parsed_args.command == 'status':
-                return self._cmd_status(parsed_args)
-            elif parsed_args.command == 'stats':
-                return self._cmd_stats(parsed_args)
-            else:
-                # コマンドが指定されていない場合は対話型モードを開始
-                return self._run_interactive()
+            return self._run_interactive()
                 
         except KeyboardInterrupt:
             print("\\n操作がキャンセルされました")
@@ -604,6 +506,11 @@ class RecRadikoCLI:
                 date = datetime.strptime(args.date, '%Y-%m-%d')
             else:
                 date = datetime.now()
+            
+            if not args.station_id:
+                print("エラー: 放送局IDが指定されていません")
+                print("使用法: list-programs --station <放送局ID>")
+                return 1
             
             programs = self.program_info_manager.fetch_program_guide(date, args.station_id)
             
@@ -1027,6 +934,7 @@ class RecRadikoCLI:
                 args.start_time = command_args[3]
                 args.end_time = command_args[4]
                 args.repeat = None
+                args.repeat_end = None
                 args.format = 'mp3'
                 args.bitrate = 128
                 args.notes = None

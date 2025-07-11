@@ -71,6 +71,10 @@ class RecRadikoLogConfig:
         if isinstance(log_level, str):
             log_level = getattr(logging, log_level.upper(), self.DEFAULT_LOG_LEVEL)
         
+        # テスト時はERRORレベル以上のみにして安全性を高める
+        if self._is_test_mode and log_level < logging.ERROR:
+            log_level = logging.ERROR
+        
         if log_file is None:
             log_file = os.environ.get('RECRADIKO_LOG_FILE', self.DEFAULT_LOG_FILE)
         
@@ -83,8 +87,8 @@ class RecRadikoLogConfig:
         # ハンドラーの設定
         handlers = []
         
-        # ファイルハンドラー（常に有効）
-        if log_file:
+        # ファイルハンドラー（テスト時以外で有効）
+        if log_file and not self._is_test_mode:
             try:
                 # ログファイルのディレクトリを作成
                 log_path = Path(log_file)
@@ -105,10 +109,14 @@ class RecRadikoLogConfig:
                 # ファイルハンドラーの作成に失敗した場合は警告
                 print(f"Warning: Failed to create log file handler: {e}", file=sys.stderr)
         
-        # コンソールハンドラー（テスト時のみ）
+        # コンソールハンドラー（テスト時のみ、さらにエラーレベル以上のみ）
         if console_output:
             console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setLevel(log_level)
+            # テスト時はERRORレベル以上のみ出力して安全性を高める
+            if self._is_test_mode:
+                console_handler.setLevel(logging.ERROR)
+            else:
+                console_handler.setLevel(log_level)
             handlers.append(console_handler)
         
         # ロガーの設定

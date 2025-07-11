@@ -73,20 +73,19 @@ python RecRadiko.py --help
 ### 🎯 基本的な使用方法
 
 ```bash
-# 放送局一覧を確認
-python RecRadiko.py list-stations
+# 対話型モードで起動
+python RecRadiko.py
 
-# TBSラジオを60分録音
-python RecRadiko.py record TBS --duration 60
-
-# 番組表を確認
-python RecRadiko.py list-programs --date 2024-01-01
-
-# 予約録音を設定
-python RecRadiko.py schedule TBS "番組名" "2024-01-01T20:00" "2024-01-01T21:00"
+# 対話型プロンプトで各種コマンドを実行
+RecRadiko> list-stations                      # 放送局一覧を確認
+RecRadiko> record TBS 60                      # TBSラジオを60分録音
+RecRadiko> list-programs --station TBS        # 番組表を確認
+RecRadiko> schedule TBS "番組名" 2024-01-01T20:00 2024-01-01T21:00  # 予約録音を設定
+RecRadiko> status                             # システム状態確認
+RecRadiko> exit                               # 終了
 
 # デーモンモードで開始
-python RecRadiko.py daemon start
+python RecRadiko.py --daemon
 ```
 
 ### ⚙️ 初期設定
@@ -173,49 +172,33 @@ RecRadiko
 ### 📊 システム監視
 
 ```bash
-# システム状態確認
-python RecRadiko.py status
+# 対話型モードで起動
+python RecRadiko.py
 
-# 統計情報表示
-python RecRadiko.py stats
-
-# エラー統計
-python RecRadiko.py error-stats
-
-# ファイル統計
-python RecRadiko.py file-stats
+# 対話型プロンプトで各種監視コマンドを実行
+RecRadiko> status                             # システム状態確認
+RecRadiko> stats                              # 統計情報表示
+RecRadiko> list-recordings                    # 録音ファイル一覧
+RecRadiko> list-schedules                     # スケジュール一覧
 ```
 
-### 🛡️ メンテナンス
-
-```bash
-# ファイル整合性チェック
-python RecRadiko.py verify-files
-
-# 破損ファイル修復
-python RecRadiko.py repair-files
-
-# 古いファイルクリーンアップ
-python RecRadiko.py cleanup --days 30
-
-# メタデータ再構築
-python RecRadiko.py rebuild-metadata
-```
-
-### 🔍 デバッグ・トラブルシューティング
+### 🛡️ メンテナンス・デバッグ
 
 ```bash
 # 詳細ログで実行
-python RecRadiko.py --verbose record TBS 5
+python RecRadiko.py --verbose
 
-# ドライランモード（実際の録音なし）
-python RecRadiko.py --dry-run schedule TBS "テスト" "2024-01-01T20:00" "2024-01-01T21:00"
+# 対話型モードで各種メンテナンスコマンドを実行
+RecRadiko> list-recordings                    # 録音ファイル一覧
+RecRadiko> list-schedules                     # スケジュール一覧確認
+RecRadiko> status                             # システム状態確認
+RecRadiko> stats                              # 統計情報表示
 
-# エラー一覧表示
-python RecRadiko.py list-errors
+# ログファイル確認
+tail -f recradiko.log
 
-# ライブログ監視
-python RecRadiko.py logs --follow
+# 環境変数による詳細ログ
+RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py
 ```
 
 ## ⚙️ 設定例
@@ -418,23 +401,25 @@ git add . && git commit -m "機能追加: ..."
 ### 📅 日常の録音スケジュール
 
 ```bash
+# 対話型モードで起動
+python RecRadiko.py
+
 # 毎日のニュース番組を録音
-python RecRadiko.py schedule TBS "森本毅郎・スタンバイ!" \
-  "2024-01-01T06:30" "2024-01-01T08:30" --repeat weekdays
+RecRadiko> schedule TBS "森本毅郎・スタンバイ!" 2024-01-01T06:30 2024-01-01T08:30 --repeat weekdays
 
 # 週末の音楽番組を録音
-python RecRadiko.py schedule LFR "オールナイトニッポン" \
-  "2024-01-06T01:00" "2024-01-06T03:00" --repeat weekends
+RecRadiko> schedule LFR "オールナイトニッポン" 2024-01-06T01:00 2024-01-06T03:00 --repeat weekends
 
 # 高品質録音設定
-python RecRadiko.py schedule QRR "クラシック音楽番組" \
-  "2024-01-01T20:00" "2024-01-01T22:00" \
-  --format aac --bitrate 320 --repeat monthly
+RecRadiko> schedule QRR "クラシック音楽番組" 2024-01-01T20:00 2024-01-01T22:00 --format aac --bitrate 320 --repeat monthly
 ```
 
 ### 🖥️ サーバー運用
 
 ```bash
+# デーモンモードで起動
+python RecRadiko.py --daemon
+
 # systemdサービスとして登録
 sudo systemctl enable recradiko
 sudo systemctl start recradiko
@@ -442,8 +427,10 @@ sudo systemctl start recradiko
 # ログ監視
 sudo journalctl -u recradiko -f
 
-# 定期メンテナンス
-0 2 * * * /usr/bin/python /opt/RecRadiko/RecRadiko.py cleanup --days 30
+# 定期メンテナンス（対話型モード）
+# 対話型モードで起動し、クリーンアップ操作を実行
+python RecRadiko.py
+RecRadiko> cleanup --days 30
 ```
 
 ## 🤝 コントリビューション

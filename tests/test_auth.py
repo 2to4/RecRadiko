@@ -131,8 +131,9 @@ class TestRadikoAuthenticator(unittest.TestCase):
         self.assertEqual(location_info.ip_address, "unknown")
     
     @patch('requests.Session.post')
+    @patch('requests.Session.get')
     @patch.object(RadikoAuthenticator, 'get_location_info')
-    def test_authenticate_success(self, mock_location, mock_post):
+    def test_authenticate_success(self, mock_location, mock_get, mock_post):
         """基本認証成功のテスト"""
         # 位置情報のモック
         mock_location.return_value = LocationInfo(
@@ -145,13 +146,17 @@ class TestRadikoAuthenticator(unittest.TestCase):
         # 認証レスポンスのモック
         mock_auth1_response = Mock()
         mock_auth1_response.raise_for_status.return_value = None
-        mock_auth1_response.headers = {'X-Radiko-AuthToken': 'test_token_123'}
+        mock_auth1_response.headers = {
+            'X-Radiko-AuthToken': 'test_token_123',
+            'X-Radiko-KeyLength': '16',
+            'X-Radiko-KeyOffset': '0'
+        }
         
         mock_auth2_response = Mock()
         mock_auth2_response.raise_for_status.return_value = None
         mock_auth2_response.text = "JP13,TBS,QRR"
         
-        mock_post.side_effect = [mock_auth1_response, mock_auth2_response]
+        mock_get.side_effect = [mock_auth1_response, mock_auth2_response]
         
         auth_info = self.authenticator.authenticate()
         
@@ -162,21 +167,23 @@ class TestRadikoAuthenticator(unittest.TestCase):
         self.assertFalse(auth_info.is_expired())
     
     @patch('requests.Session.post')
-    def test_authenticate_failure_no_token(self, mock_post):
+    @patch('requests.Session.get')
+    def test_authenticate_failure_no_token(self, mock_get, mock_post):
         """認証失敗（トークンなし）のテスト"""
         # トークンなしのレスポンス
         mock_response = Mock()
         mock_response.raise_for_status.return_value = None
         mock_response.headers = {}
-        mock_post.return_value = mock_response
+        mock_get.return_value = mock_response
         
         with self.assertRaises(AuthenticationError):
             self.authenticator.authenticate()
     
     @patch('requests.Session.post')
-    def test_authenticate_failure_network_error(self, mock_post):
+    @patch('requests.Session.get')
+    def test_authenticate_failure_network_error(self, mock_get, mock_post):
         """認証失敗（ネットワークエラー）のテスト"""
-        mock_post.side_effect = Exception("Network error")
+        mock_get.side_effect = Exception("Network error")
         
         with self.assertRaises(AuthenticationError):
             self.authenticator.authenticate()

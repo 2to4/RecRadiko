@@ -77,7 +77,7 @@ class TestUserJourneyA1:
                 cli.program_manager.fetch_station_list.return_value = test_stations
                 
                 # 5. 放送局一覧の取得・表示テスト
-                stations_result = cli.list_stations()
+                stations_result = cli._execute_interactive_command(['list-stations'])
                 assert stations_result == 0, "放送局一覧取得が失敗"
                 
                 # 6. 番組表の取得・確認
@@ -106,7 +106,7 @@ class TestUserJourneyA1:
                 ]
                 cli.program_manager.fetch_program_guide.return_value = test_programs
                 
-                programs_result = cli.list_programs([])
+                programs_result = cli._execute_interactive_command(['list-programs'])
                 assert programs_result == 0, "番組表取得が失敗"
                 
                 # 7. 初回即座録音実行
@@ -130,7 +130,7 @@ class TestUserJourneyA1:
                 cli.streaming_manager.get_stream_url.return_value = "https://example.com/test_stream.m3u8"
                 
                 # 8. 即座録音の実行
-                record_result = cli.record_now("TBS", duration_minutes=30)
+                record_result = cli._execute_interactive_command(['record', 'TBS', '30'])
                 assert record_result == 0, "初回録音実行が失敗"
                 
                 # 9. 録音ファイル生成・メタデータ付与の確認
@@ -149,7 +149,7 @@ class TestUserJourneyA1:
                 cli.file_manager.register_file.return_value = test_metadata
                 
                 # 10. 録音結果確認・統計表示
-                stats_result = cli.show_statistics()
+                stats_result = cli._execute_interactive_command(['stats'])
                 assert stats_result == 0, "統計表示が失敗"
                 
                 # 検証: 初回ユーザーフローの完了
@@ -284,18 +284,18 @@ class TestUserJourneyA2:
         
         # スケジュール作成の実行
         for schedule in created_schedules:
-            result = cli.create_schedule(
+            result = cli._execute_interactive_command([
+                'schedule',
                 schedule.station_id,
                 schedule.program_title,
                 schedule.start_time.strftime("%Y-%m-%dT%H:%M"),
-                schedule.end_time.strftime("%Y-%m-%dT%H:%M"),
-                repeat=schedule.repeat_pattern.value
-            )
+                schedule.end_time.strftime("%Y-%m-%dT%H:%M")
+            ])
             assert result == 0, f"スケジュール作成失敗: {schedule.program_title}"
         
         # 作成されたスケジュールの確認
         cli.scheduler.list_schedules.return_value = created_schedules
-        schedules_result = cli.list_schedules()
+        schedules_result = cli._execute_interactive_command(['list-schedules'])
         assert schedules_result == 0, "スケジュール一覧取得が失敗"
         
         # スケジュール競合の検証
@@ -498,14 +498,13 @@ class TestUserJourneyA3:
         cli.recording_manager.create_recording_job.return_value = high_quality_job
         
         # 2. 長時間録音の開始（3時間）
-        record_result = cli.schedule_recording(
-            station_id=classical_program.station_id,
-            program_title=classical_program.title,
-            start_time=classical_program.start_time.strftime("%Y-%m-%dT%H:%M"),
-            end_time=classical_program.end_time.strftime("%Y-%m-%dT%H:%M"),
-            format="aac",
-            bitrate=320
-        )
+        record_result = cli._execute_interactive_command([
+            'schedule',
+            classical_program.station_id,
+            classical_program.title,
+            classical_program.start_time.strftime("%Y-%m-%dT%H:%M"),
+            classical_program.end_time.strftime("%Y-%m-%dT%H:%M")
+        ])
         assert record_result == 0, "高品質録音スケジュール作成が失敗"
         
         # 3. 録音品質チェック・ファイル検証

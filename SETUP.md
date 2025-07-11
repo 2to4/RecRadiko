@@ -101,17 +101,23 @@ nano config.json  # または好みのエディタ
 # ヘルプ表示
 python RecRadiko.py --help
 
+# 対話型モードで起動
+python RecRadiko.py
+
 # 放送局一覧確認
-python RecRadiko.py list-stations
+RecRadiko> list-stations
 ```
 
 ### 2. 録音テスト
 ```bash
+# 対話型モードで起動
+python RecRadiko.py
+
 # 1分間のテスト録音
-python RecRadiko.py record TBS --duration 1
+RecRadiko> record TBS 1
 
 # 録音ファイル確認
-ls recordings/
+RecRadiko> list-recordings
 ```
 
 ### 3. テストスイート実行（開発者向け）
@@ -145,25 +151,31 @@ ffmpeg -version
 **症状**: `Authentication failed`
 **解決策**:
 ```bash
+# 対話型モードで起動
+python RecRadiko.py
+
 # 認証状況確認
-python RecRadiko.py auth-status
+RecRadiko> auth-status
 
 # 認証キャッシュリセット
 rm -f auth_cache.json
 
 # 地域ID確認
-python RecRadiko.py diagnose
+RecRadiko> diagnose
 ```
 
 #### 3. 録音ファイルが空
 **症状**: 録音ファイルのサイズが0バイト
 **解決策**:
 ```bash
+# 対話型モードで起動
+python RecRadiko.py
+
 # ネットワーク確認
-python RecRadiko.py test-connection
+RecRadiko> test-connection
 
 # ストリーミング確認
-python RecRadiko.py test-stream TBS
+RecRadiko> test-stream TBS
 
 # ログ確認
 tail -f recradiko.log
@@ -231,14 +243,17 @@ python -m pytest tests/ -v
 
 ### 診断コマンド
 ```bash
+# 対話型モードで起動
+python RecRadiko.py
+
 # 総合診断
-python RecRadiko.py diagnose
+RecRadiko> diagnose
 
 # システム状況
-python RecRadiko.py system-status
+RecRadiko> status
 
 # 依存関係確認
-python RecRadiko.py check-dependencies
+RecRadiko> check-dependencies
 ```
 
 ### サポートリクエスト

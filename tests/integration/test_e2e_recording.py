@@ -154,8 +154,8 @@ class TestEndToEndRecording(unittest.TestCase):
             # CLI引数のシミュレート
             test_args = ['record', 'TBS', '30']
             
-            # CLI実行
-            exit_code = cli.run(test_args)
+            # 対話型コマンド実行
+            exit_code = cli._execute_interactive_command(test_args)
             
             # 結果の検証
             self.assertEqual(exit_code, 0, "CLI実行が成功する必要があります")
@@ -324,9 +324,9 @@ class TestEndToEndRecording(unittest.TestCase):
             cli.recording_manager = Mock()
             cli.recording_manager.create_recording_job.side_effect = AuthenticationError("認証に失敗しました")
             
-            # エラーが発生するCLI実行
+            # エラーが発生する対話型コマンド実行
             test_args = ['record', 'TBS', '30']
-            exit_code = cli.run(test_args)
+            exit_code = cli._execute_interactive_command(test_args)
             
             # エラー処理の確認
             self.assertEqual(exit_code, 1, "認証エラー時は終了コード1を返す必要があります")

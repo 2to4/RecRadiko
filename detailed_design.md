@@ -384,14 +384,17 @@ CONFIGURATION, SYSTEM, UNKNOWN
 
 #### 使用例
 ```bash
+# 対話型モードで起動
+python RecRadiko.py
+
 # 即座録音（TBSラジオ、60分）
-python RecRadiko.py record TBS --duration 60
+RecRadiko> record TBS 60
 
 # スケジュール録音（毎週繰り返し）
-python RecRadiko.py schedule TBS "番組名" "2024-01-01T20:00" "2024-01-01T21:00" --repeat weekly
+RecRadiko> schedule TBS "番組名" 2024-01-01T20:00 2024-01-01T21:00 --repeat weekly
 
 # 番組検索
-python RecRadiko.py search-programs "ニュース" --date 2024-01-01
+RecRadiko> search-programs "ニュース" --date 2024-01-01
 ```
 
 #### 主要機能

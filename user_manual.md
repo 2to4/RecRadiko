@@ -14,7 +14,7 @@ RecRadikoは、Radiko（日本のインターネットラジオサービス）�
 - 📂 **自動整理** - 録音ファイルを日付・放送局別に自動分類
 - 🚀 **デーモンモード** - バックグラウンドで24時間稼働
 - 🔐 **プレミアム対応** - 無料・有料プランの両方に対応
-- 💻 **CLI操作** - コマンドラインでの簡単操作
+- 💻 **対話型インターフェース** - わかりやすい対話型操作
 - 🎵 **高品質録音** - AAC/MP3/FLAC形式対応、最大320kbps
 - 🔄 **並行録音** - 最大8番組の同時録音
 - 📊 **システム監視** - CPU・メモリ・ディスク使用量の監視
@@ -52,7 +52,7 @@ sudo apt install ffmpeg
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/your-repo/RecRadiko.git
+git clone https://github.com/2to4/RecRadiko.git
 cd RecRadiko
 
 # 依存関係のインストール
@@ -71,31 +71,46 @@ python RecRadiko.py --help
 
 ## 🚀 基本的な使い方
 
-### 対話型モード（推奨）
+### 対話型モードでの起動
 
-RecRadikoは対話型モードで使用することを推奨します。処理が終わった後もコマンドを受け付ける状態が続きます。
+RecRadikoは対話型モード専用に設計されています。起動すると対話型プロンプトが表示され、コマンドを入力できます。
 
 ```bash
-# 対話型モードで起動
-python RecRadiko.py --interactive
-# または引数なしで実行
+# 対話型モードで起動（標準）
+python RecRadiko.py
+
+# 詳細ログ付きで起動
+python RecRadiko.py --verbose
+
+# デーモンモードで起動
+python RecRadiko.py --daemon
+```
+
+### 対話型操作の基本
+
+```bash
+# アプリケーションを起動
 python RecRadiko.py
 
 # 対話型プロンプトが表示されます
+RecRadiko 対話型モード
+利用可能なコマンド: record, schedule, list-stations, list-programs, list-schedules, status, stats, help, exit
+例: record TBS 60
+終了するには 'exit' または Ctrl+C を入力してください
+------------------------------------------------------------
+
+RecRadiko> help
 RecRadiko> list-stations
 RecRadiko> record TBS 60
-RecRadiko> help
+RecRadiko> schedule TBS "ニュース番組" 2024-01-01T19:00 2024-01-01T20:00
+RecRadiko> status
 RecRadiko> exit
 ```
 
 ### 放送局一覧を確認
 
 ```bash
-# 対話型モード内で
 RecRadiko> list-stations
-
-# または一回だけ実行
-python RecRadiko.py list-stations
 ```
 
 出力例：
@@ -111,57 +126,58 @@ RN1       ラジオNIKKEI第1
 ### 即座に録音
 
 ```bash
-# 対話型モード内で
+# 基本的な録音（60分間）
 RecRadiko> record TBS 60
-RecRadiko> record QRR 30 --format mp3 --bitrate 192
 
-# または一回だけ実行
-python RecRadiko.py record TBS 60
-python RecRadiko.py record QRR 30 --format mp3 --bitrate 192
+# 高品質録音
+RecRadiko> record QRR 30
+# （注：フォーマットとビットレートは設定ファイルで指定）
 ```
 
 ### 番組表の確認
 
 ```bash
-# 対話型モード内で
+# 今日の番組表
 RecRadiko> list-programs TBS
-RecRadiko> list-programs TBS --date 2024-01-01
 
-# または一回だけ実行
-python RecRadiko.py list-programs TBS
-python RecRadiko.py list-programs TBS --date 2024-01-01
-
-# 詳細ログ付きで実行（問題解決時）
-RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py list-programs TBS
+# 特定日の番組表（対話型では日付指定は設定で行う）
+RecRadiko> list-programs TBS
 ```
 
 ### 予約録音
 
 ```bash
-# 対話型モード内で
-RecRadiko> schedule TBS "ラジオ番組名" "2024-01-01T20:00" "2024-01-01T21:00"
+# 基本的な予約録音
+RecRadiko> schedule TBS "ラジオ番組名" 2024-01-01T20:00 2024-01-01T21:00
 
-# または一回だけ実行
-python RecRadiko.py schedule TBS "ラジオ番組名" "2024-01-01T20:00" "2024-01-01T21:00"
-python RecRadiko.py schedule QRR "毎週の番組" "2024-01-01T19:00" "2024-01-01T20:00" --repeat weekly
-python RecRadiko.py schedule TBS "朝のニュース" "2024-01-01T07:00" "2024-01-01T09:00" --repeat weekdays
-python RecRadiko.py schedule LFR "月例番組" "2024-01-01T20:00" "2024-01-01T22:00" --repeat monthly
-python RecRadiko.py schedule QRR "音楽番組" "2024-01-01T20:00" "2024-01-01T22:00" --format aac --bitrate 320
+# 時間の形式例
+RecRadiko> schedule QRR "毎週の番組" 2024-01-01T19:00 2024-01-01T20:00
+RecRadiko> schedule TBS "朝のニュース" 2024-01-01T07:00 2024-01-01T09:00
+RecRadiko> schedule LFR "月例番組" 2024-01-01T20:00 2024-01-01T22:00
 ```
 
 ### スケジュール管理
 
 ```bash
-# 対話型モード内で
+# 予約一覧表示
 RecRadiko> list-schedules
-RecRadiko> status
-RecRadiko> stats
 
-# または一回だけ実行
-python RecRadiko.py list-schedules
-python RecRadiko.py list-schedules --status active
-python RecRadiko.py list-schedules --station TBS
-python RecRadiko.py remove-schedule <スケジュールID>
+# システム状態確認
+RecRadiko> status
+
+# 統計情報表示
+RecRadiko> stats
+```
+
+### ヘルプとコマンド一覧
+
+```bash
+# ヘルプ表示
+RecRadiko> help
+
+# アプリケーション終了
+RecRadiko> exit
+# または Ctrl+C
 ```
 
 ## ⚙️ 設定
@@ -280,15 +296,20 @@ python RecRadiko.py --daemon --config /path/to/config.json
 
 ### デーモン監視
 
+デーモンが動作している間でも、別のターミナルから対話型モードで状態確認ができます：
+
 ```bash
+# 対話型モードで起動
+python RecRadiko.py
+
 # システム状態確認
-python RecRadiko.py status
+RecRadiko> status
 
 # 統計情報
-python RecRadiko.py stats
+RecRadiko> stats
 
 # 録音ファイル一覧
-python RecRadiko.py list-recordings
+RecRadiko> list-recordings
 ```
 
 ## 📊 統計とモニタリング
@@ -296,20 +317,16 @@ python RecRadiko.py list-recordings
 ### 録音統計
 
 ```bash
-# 統計情報表示
-python RecRadiko.py stats
+# 対話型モードで
+RecRadiko> stats
 ```
 
 ### システム監視
 
 ```bash
 # システム状態確認
-python RecRadiko.py status
-
-# 設定確認
-python RecRadiko.py show-config
+RecRadiko> status
 ```
-
 
 ## 🗂️ ファイル管理
 
@@ -317,19 +334,10 @@ python RecRadiko.py show-config
 
 ```bash
 # 録音ファイル一覧
-python RecRadiko.py list-recordings
+RecRadiko> list-recordings
 
-# 放送局でフィルター
-python RecRadiko.py list-recordings --station TBS
-
-# 日付でフィルター
-python RecRadiko.py list-recordings --date 2024-01-01
-
-# 番組名で検索
-python RecRadiko.py list-recordings --search "ニュース"
+# より詳細な検索や絞り込みは設定ファイルで指定
 ```
-
-
 
 ## 🔧 トラブルシューティング
 
@@ -343,7 +351,7 @@ tail -f recradiko.log
 grep "ERROR" recradiko.log
 
 # 詳細ログで実行
-RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py record TBS 5
+RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py
 
 # ログ出力制御確認
 python -c "from src.logging_config import is_test_mode, is_console_output_enabled; print(f'Test mode: {is_test_mode()}, Console output: {is_console_output_enabled()}')"
@@ -353,11 +361,11 @@ python -c "from src.logging_config import is_test_mode, is_console_output_enable
 
 #### 認証エラー
 ```bash
-# 放送局一覧で認証確認
-python RecRadiko.py list-stations
+# 対話型モードで確認
+python RecRadiko.py
 
-# システム状態確認
-python RecRadiko.py status
+RecRadiko> list-stations
+RecRadiko> status
 ```
 
 #### 録音エラー
@@ -366,13 +374,15 @@ python RecRadiko.py status
 ffmpeg -version
 
 # 実際の録音テスト（1分間）
-python RecRadiko.py record TBS 1
+python RecRadiko.py
+
+RecRadiko> record TBS 1
 ```
 
 #### ネットワークエラー
 ```bash
-# 放送局一覧で接続確認
-python RecRadiko.py list-stations
+# 対話型モードで接続確認
+RecRadiko> list-stations
 
 # DNS確認
 nslookup radiko.jp
@@ -384,14 +394,9 @@ ping radiko.jp
 ### 基本診断
 
 ```bash
-# 設定表示
-python RecRadiko.py show-config
-
-# システム状態確認
-python RecRadiko.py status
-
-# 統計情報確認
-python RecRadiko.py stats
+# 対話型モードで各種確認
+RecRadiko> status
+RecRadiko> stats
 ```
 
 ## 🔧 高度な使い方
@@ -399,8 +404,8 @@ python RecRadiko.py stats
 ### 設定ファイルの使い分け
 
 ```bash
-# 設定ファイルを指定
-python RecRadiko.py --config production.json record TBS 60
+# 設定ファイルを指定して起動
+python RecRadiko.py --config production.json
 
 # 複数設定での並行実行
 python RecRadiko.py --config home.json --daemon &
@@ -411,27 +416,26 @@ python RecRadiko.py --config server.json --daemon &
 
 ```bash
 # ログレベル制御
-RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py record TBS 5
+RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py
 
 # 出力ディレクトリ制御
-RECRADIKO_OUTPUT_DIR=/tmp/recordings python RecRadiko.py record QRR 10
+RECRADIKO_OUTPUT_DIR=/tmp/recordings python RecRadiko.py
 
 # 並行録音数制御
 RECRADIKO_MAX_CONCURRENT=8 python RecRadiko.py --daemon
 ```
 
-### バッチ処理
+### バッチ処理（スクリプト例）
 
 ```bash
-# 複数番組の一括予約
-cat schedules.txt | while read line; do
-  python RecRadiko.py schedule $line
-done
-
-# 複数放送局の一括録音
-for station in TBS QRR LFR; do
-  python RecRadiko.py record $station 30 &
-done
+# 複数番組の一括予約スクリプト
+#!/bin/bash
+python RecRadiko.py <<EOF
+schedule TBS "朝のニュース" 2024-01-01T07:00 2024-01-01T09:00
+schedule QRR "昼の番組" 2024-01-01T12:00 2024-01-01T13:00
+schedule LFR "夜の音楽" 2024-01-01T20:00 2024-01-01T22:00
+exit
+EOF
 ```
 
 ### プログラマティック操作
@@ -446,23 +450,8 @@ from datetime import datetime, timedelta
 # CLIインスタンス作成
 cli = RecRadikoCLI()
 
-# 即座に録音
-job_id = cli.record_now('TBS', duration_minutes=60)
-
-# スケジュール作成
-start_time = datetime.now() + timedelta(hours=1)
-end_time = start_time + timedelta(hours=2)
-schedule_id = cli.schedule_recording(
-    station_id='TBS',
-    program_title='プログラム録音',
-    start_time=start_time,
-    end_time=end_time,
-    repeat_pattern='weekly'
-)
-
-# 録音状況監視
-status = cli.get_recording_status(job_id)
-print(f"録音状況: {status['status']}")
+# 対話型モードを使わずに直接操作
+# （注：この方法は高度な用途のみ）
 ```
 
 ## 📝 設定例
@@ -572,7 +561,7 @@ print(f"録音状況: {status['status']}")
 
 ### バグレポート・機能要望
 
-GitHub Issues: https://github.com/your-repo/RecRadiko/issues
+GitHub Issues: https://github.com/2to4/RecRadiko/issues
 
 ### ライセンス
 
@@ -607,15 +596,18 @@ MIT License
 - `INT`: interfm
 - `FMT`: TOKYO FM
 
-### おすすめ設定
+### おすすめ使用例
 
 #### 日常使い
 ```bash
+# アプリケーション起動
+python RecRadiko.py
+
 # 毎日のニュース番組を録音
-python RecRadiko.py schedule TBS "森本毅郎・スタンバイ!" "2024-01-01T06:30" "2024-01-01T08:30" --repeat weekdays
+RecRadiko> schedule TBS "森本毅郎・スタンバイ!" 2024-01-01T06:30 2024-01-01T08:30
 
 # 週末の音楽番組を録音
-python RecRadiko.py schedule LFR "オールナイトニッポン" "2024-01-06T01:00" "2024-01-06T03:00" --repeat weekends
+RecRadiko> schedule LFR "オールナイトニッポン" 2024-01-06T01:00 2024-01-06T03:00
 ```
 
 #### 長期間録音
@@ -623,16 +615,19 @@ python RecRadiko.py schedule LFR "オールナイトニッポン" "2024-01-06T01
 # デーモンモードで開始
 python RecRadiko.py --daemon
 
-# 複数番組を一括予約
-for station in TBS QRR LFR; do
-    python RecRadiko.py schedule $station "深夜番組" "2024-01-01T25:00" "2024-01-01T27:00" --repeat weekly
-done
+# 別ターミナルで対話型モード起動し、複数番組を予約
+python RecRadiko.py
+
+RecRadiko> schedule TBS "深夜番組" 2024-01-01T25:00 2024-01-01T27:00
+RecRadiko> schedule QRR "深夜番組" 2024-01-01T25:00 2024-01-01T27:00
+RecRadiko> schedule LFR "深夜番組" 2024-01-01T25:00 2024-01-01T27:00
+RecRadiko> exit
 ```
 
 #### ログ制御の活用
 ```bash
 # 問題解決時の詳細ログ
-RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py record TBS 5
+RECRADIKO_LOG_LEVEL=DEBUG python RecRadiko.py
 
 # サーバー運用時の警告のみ
 RECRADIKO_LOG_LEVEL=WARNING python RecRadiko.py --daemon
@@ -640,3 +635,11 @@ RECRADIKO_LOG_LEVEL=WARNING python RecRadiko.py --daemon
 # カスタムログファイル
 RECRADIKO_LOG_FILE=/var/log/recradiko_custom.log python RecRadiko.py --daemon
 ```
+
+### 対話型操作のコツ
+
+1. **コマンド補完**: Tabキーでコマンド補完が利用できます
+2. **履歴機能**: 上下矢印キーで過去のコマンドを呼び出せます
+3. **ヘルプ**: 困ったときは `help` コマンドで利用可能なコマンドを確認
+4. **安全な終了**: `exit` コマンドまたは Ctrl+C で安全に終了できます
+5. **長時間実行**: デーモンモードと対話型モードを併用すると便利です
