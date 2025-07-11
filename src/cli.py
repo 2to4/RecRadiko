@@ -472,7 +472,7 @@ class RecRadikoCLI:
                 output_path = args.output
             
             # 録音ジョブを作成
-            job = self.recording_manager.create_recording_job(
+            job_id = self.recording_manager.create_recording_job(
                 station_id=args.station_id,
                 program_title=f"{args.station_id}番組",
                 start_time=now,
@@ -482,10 +482,12 @@ class RecRadikoCLI:
                 bitrate=bitrate
             )
             
+            # ジョブオブジェクトを取得
+            job = self.recording_manager.get_job_status(job_id)
             print(f"録音を開始しました: {job}")
             
             # 録音開始
-            self.recording_manager.schedule_recording(job)
+            self.recording_manager.schedule_recording(job_id)
             
             # テスト時は進捗監視をスキップ
             if self._all_components_injected:
@@ -493,11 +495,11 @@ class RecRadikoCLI:
             else:
                 # 進捗監視（実際の実行時のみ）
                 while True:
-                    current_job = self.recording_manager.get_job_status(job)
+                    current_job = self.recording_manager.get_job_status(job_id)
                     if not current_job:
                         break
                     
-                    progress = self.recording_manager.get_job_progress(job)
+                    progress = self.recording_manager.get_job_progress(job_id)
                     if progress:
                         print(f"\\r進捗: {progress.progress_percent:.1f}%", end="", flush=True)
                     

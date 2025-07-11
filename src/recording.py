@@ -479,7 +479,11 @@ class RecordingManager:
                     self.logger.warning(f"進捗コールバックエラー: {e}")
         
         # 録音時間制限（秒）
-        max_recording_time = job.duration_seconds if hasattr(job, 'duration_seconds') else 300  # デフォルト5分
+        max_recording_time = getattr(job, 'duration_seconds', 300)  # デフォルト5分
+        if max_recording_time <= 0:
+            max_recording_time = 300  # 無効な値の場合のフォールバック
+        
+        self.logger.info(f"録音時間制限: {max_recording_time}秒 ({max_recording_time//60}分)")
         recording_start_time = time.time()
         
         # セグメントをダウンロードして保存

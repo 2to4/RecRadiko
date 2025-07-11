@@ -857,15 +857,22 @@ class TestRecRadikoCLILazyInitialization(unittest.TestCase):
              patch('src.streaming.StreamingManager') as mock_streaming_class:
             mock_streaming = Mock()
             mock_recording = Mock()
+            # create_recording_jobはjob_idを返す
+            mock_job_id = "test_job_123"
             mock_job = Mock()
             mock_job.status = RecordingStatus.PENDING
-            mock_recording.create_recording_job.return_value = mock_job
+            mock_recording.create_recording_job.return_value = mock_job_id
+            mock_recording.get_job_status.return_value = mock_job
+            mock_recording.schedule_recording.return_value = True
             
             mock_streaming_class.return_value = mock_streaming
             mock_recording_class.return_value = mock_recording
             
             cli = RecRadikoCLI(config_path=str(self.config_path))
             cli._initialize_components()
+            
+            # テスト環境フラグを設定
+            cli._all_components_injected = True
             
             # 初期状態では録音管理がNone
             self.assertIsNone(cli.recording_manager)
