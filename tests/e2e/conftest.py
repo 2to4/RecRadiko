@@ -27,6 +27,11 @@ from src.file_manager import FileManager, FileMetadata, StorageInfo
 from src.scheduler import RecordingScheduler, RecordingSchedule, RepeatPattern, ScheduleStatus
 from src.daemon import DaemonManager, DaemonStatus
 from src.error_handler import ErrorHandler, ErrorRecord
+from src.live_streaming import (
+    LivePlaylistMonitor, SegmentTracker, SegmentDownloader, 
+    LiveRecordingSession, Segment, PlaylistUpdate
+)
+from src.live_streaming_config import get_config_for_environment
 
 
 @pytest.fixture(scope="session")
@@ -111,7 +116,8 @@ def test_config(temp_environment):
             "time_acceleration": 100,
             "mock_external_apis": True,
             "simulate_network_conditions": True
-        }
+        },
+        "live_streaming": get_config_for_environment('test')
     }
     
     config_path = os.path.join(temp_environment["config_dir"], "config.json")
@@ -501,6 +507,83 @@ def network_simulator():
     return NetworkSimulator()
 
 
+@pytest.fixture
+def live_streaming_environment(temp_environment):
+    """ライブストリーミングテスト用環境"""
+    # ライブストリーミング専用ディレクトリ
+    live_dirs = {
+        "segment_cache_dir": os.path.join(temp_environment["cache_dir"], "segments"),
+        "playlist_cache_dir": os.path.join(temp_environment["cache_dir"], "playlists"),
+        "live_output_dir": os.path.join(temp_environment["output_dir"], "live")
+    }
+    
+    for dir_path in live_dirs.values():
+        os.makedirs(dir_path, exist_ok=True)
+    
+    # ライブストリーミング設定
+    live_config = get_config_for_environment('test')
+    
+    return {
+        **temp_environment,
+        **live_dirs,
+        "live_config": live_config
+    }
+
+
+@pytest.fixture
+def mock_live_streaming_services():
+    """ライブストリーミング用外部サービスモック"""
+    mock_playlist_content = """#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-MEDIA-SEQUENCE:12345
+#EXTINF:10.0,
+https://example.com/segment_001.ts
+#EXTINF:10.0,
+https://example.com/segment_002.ts
+#EXTINF:10.0,
+https://example.com/segment_003.ts"""
+    
+    mock_segment_data = b'test_segment_data_' + b'0' * 1024  # 1KB of test data
+    
+    with patch('aiohttp.ClientSession') as mock_session_class:
+        # セッションモック
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+        
+        # プレイリスト取得モック
+        async def mock_get_playlist(*args, **kwargs):
+            mock_response = Mock()
+            mock_response.status = 200
+            mock_response.text = Mock(return_value=mock_playlist_content)
+            
+            # context manager の模擬
+            mock_context = Mock()
+            mock_context.__aenter__ = Mock(return_value=mock_response)
+            mock_context.__aexit__ = Mock(return_value=None)
+            return mock_context
+        
+        # セグメント取得モック
+        async def mock_get_segment(*args, **kwargs):
+            mock_response = Mock()
+            mock_response.status = 200
+            mock_response.read = Mock(return_value=mock_segment_data)
+            
+            mock_context = Mock()
+            mock_context.__aenter__ = Mock(return_value=mock_response)
+            mock_context.__aexit__ = Mock(return_value=None)
+            return mock_context
+        
+        mock_session.get.side_effect = [mock_get_playlist, mock_get_segment, mock_get_segment]
+        
+        yield {
+            "session_class": mock_session_class,
+            "session": mock_session,
+            "playlist_content": mock_playlist_content,
+            "segment_data": mock_segment_data
+        }
+
+
 # E2Eテスト用のマーカー定義
 def pytest_configure(config):
     """pytestマーカーの設定"""
@@ -524,4 +607,10 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "resource_intensive: リソース集約テスト"
+    )
+    config.addinivalue_line(
+        "markers", "live_streaming: ライブストリーミングテスト"
+    )
+    config.addinivalue_line(
+        "markers", "real_api: 実際のAPI使用テスト"
     )

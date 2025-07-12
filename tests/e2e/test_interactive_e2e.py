@@ -192,7 +192,7 @@ class TestInteractiveE2E(unittest.TestCase):
         """基本的な対話型ワークフローテスト"""
         commands = [
             "help",                    # ヘルプ表示
-            "status",                  # システム状況確認
+            "status",                  # システム状態確認
             "list-stations",           # 放送局一覧
             "list-schedules",          # スケジュール一覧
             "list-recordings",         # 録音ファイル一覧
@@ -207,7 +207,7 @@ class TestInteractiveE2E(unittest.TestCase):
         # 出力内容確認
         self.assertIn("RecRadiko 対話型モード", stdout)
         self.assertIn("利用可能なコマンド", stdout)  # help
-        self.assertIn("システム状況", stdout)       # status  
+        self.assertIn("システム状態", stdout)       # status  
         self.assertIn("放送局一覧", stdout)         # list-stations
         self.assertIn("録音予約一覧", stdout)       # list-schedules
         self.assertIn("録音ファイル一覧", stdout)   # list-recordings
@@ -239,7 +239,7 @@ class TestInteractiveE2E(unittest.TestCase):
         
         # 検証
         self.assertEqual(returncode, 0)
-        self.assertIn("システム状況:", stdout)
+        self.assertIn("システム状態:", stdout)
         self.assertIn("録音状況", stdout)
         self.assertIn("ストレージ使用状況", stdout)
         self.assertIn("統計情報:", stdout)
@@ -291,7 +291,7 @@ class TestInteractiveE2E(unittest.TestCase):
         
         # 空入力は無視され、正常なコマンドが実行される
         self.assertEqual(returncode, 0)
-        self.assertIn("システム状況", stdout)
+        self.assertIn("システム状態", stdout)
     
     def test_interactive_session_persistence(self):
         """セッション状態の持続テスト"""
@@ -308,7 +308,7 @@ class TestInteractiveE2E(unittest.TestCase):
         self.assertEqual(returncode, 0)
         
         # 複数のstatusコマンド実行により状態が保持されていることを確認
-        status_count = stdout.count("システム状況:")
+        status_count = stdout.count("システム状態:")
         self.assertEqual(status_count, 2)
     
     def test_interactive_command_sequence_performance(self):
@@ -328,7 +328,7 @@ class TestInteractiveE2E(unittest.TestCase):
         self.assertLess(execution_time, 45, "コマンド実行が遅すぎます")
         
         # 全コマンドが実行されたことを確認
-        self.assertEqual(stdout.count("システム状況"), 10)
+        self.assertEqual(stdout.count("システム状態"), 10)
         self.assertEqual(stdout.count("統計情報"), 10)
         self.assertEqual(stdout.count("録音予約一覧"), 10)
     
@@ -346,11 +346,11 @@ class TestInteractiveE2E(unittest.TestCase):
         
         # エラー後も正常動作継続
         self.assertEqual(returncode, 0)
-        self.assertIn("システム状況", stdout)
+        self.assertIn("システム状態", stdout)
         self.assertIn("統計情報", stdout)
         
         # エラーコマンドのハンドリング確認
-        status_count = stdout.count("システム状況:")
+        status_count = stdout.count("システム状態:")
         self.assertEqual(status_count, 2)
     
     def test_interactive_user_experience_flow(self):
@@ -376,7 +376,7 @@ class TestInteractiveE2E(unittest.TestCase):
             ("help", "利用可能なコマンド"),
             ("list-stations", "放送局一覧"),
             ("list-schedules", "録音予約一覧"),
-            ("status", "システム状況"),
+            ("status", "システム状態"),
             ("list-recordings", "録音ファイル一覧"),
             ("stats", "統計情報")
         ]
@@ -455,7 +455,7 @@ class TestInteractiveE2E(unittest.TestCase):
         
         # 設定が反映されていることを確認
         self.assertEqual(process.returncode, 0)
-        self.assertIn("システム状況", stdout)
+        self.assertIn("システム状態", stdout)
     
     def test_interactive_graceful_shutdown(self):
         """正常終了テスト"""

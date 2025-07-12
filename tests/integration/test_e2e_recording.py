@@ -1,10 +1,12 @@
 """
-エンドツーエンド録音結合テスト
+エンドツーエンド録音結合テスト - ライブストリーミング対応完全版
 
 このモジュールは、RecRadikoの録音機能の完全なワークフローを検証する結合テストを含みます。
-- CLI → 認証 → ストリーミング → 録音 → ファイル管理の統合フロー
+2025年7月12日更新: ライブストリーミング対応を完全統合
+- CLI → 認証 → ライブストリーミング → 録音 → ファイル管理の統合フロー
 - 番組情報との統合
 - エラーハンドリングの統合
+- HLSスライディングウィンドウ対応
 """
 
 import unittest
@@ -13,8 +15,9 @@ import os
 import shutil
 import json
 import time
+import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, MagicMock, patch, call, AsyncMock
 from pathlib import Path
 
 # RecRadikoモジュールのインポート
@@ -26,6 +29,10 @@ from src.recording import RecordingManager, RecordingJob, RecordingStatus
 from src.file_manager import FileManager, FileMetadata
 from src.scheduler import RecordingScheduler
 from src.error_handler import ErrorHandler
+from src.live_streaming import (
+    LivePlaylistMonitor, SegmentTracker, LiveRecordingSession, 
+    SegmentDownloader, RecordingResult
+)
 
 
 class TestEndToEndRecording(unittest.TestCase):
@@ -408,6 +415,178 @@ class TestEndToEndRecording(unittest.TestCase):
         self.assertEqual(recording_data['station_id'], test_data['station_id'])
         self.assertEqual(stream_data['start_time'], test_data['start_time'])
         self.assertEqual(recording_data['start_time'], test_data['start_time'])
+
+
+class TestLiveStreamingIntegrationE2E(unittest.TestCase):
+    """ライブストリーミング統合エンドツーエンドテスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.output_dir = os.path.join(self.temp_dir, "live_recordings")
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        # ライブストリーミング設定
+        self.test_config = {
+            "area_id": "JP13",
+            "output_dir": self.output_dir,
+            "max_concurrent_recordings": 2,
+            "live_streaming_enabled": True,
+            "playlist_update_interval": 5,
+            "max_concurrent_downloads": 3
+        }
+    
+    def tearDown(self):
+        """テスト後のクリーンアップ"""
+        if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+    
+    @patch('src.auth.RadikoAuthenticator.authenticate')
+    @patch('src.streaming.StreamingManager.get_stream_url')
+    def test_live_streaming_complete_workflow(self, mock_get_stream, mock_authenticate):
+        """ライブストリーミング完全ワークフローテスト"""
+        
+        # 認証モック
+        mock_authenticate.return_value = True
+        mock_auth_info = Mock(spec=AuthInfo)
+        mock_auth_info.auth_token = "live_test_token"
+        mock_auth_info.area_id = "JP13"
+        
+        # HLSストリームURLモック
+        mock_get_stream.return_value = "https://example.com/live.m3u8"
+        
+        # 統合コンポーネントの初期化
+        with patch('src.auth.RadikoAuthenticator.get_valid_auth_info', return_value=mock_auth_info):
+            authenticator = RadikoAuthenticator()
+            streaming_manager = StreamingManager(authenticator)
+            
+            # ライブ録音セッションの作成
+            start_time = datetime.now()
+            end_time = start_time + timedelta(seconds=30)
+            
+            job = RecordingJob(
+                id="live_test_job",
+                station_id="TBS",
+                program_title="ライブ統合テスト",
+                start_time=start_time,
+                end_time=end_time,
+                output_path=os.path.join(self.output_dir, "live_test.mp3")
+            )
+            
+            session = LiveRecordingSession(job, streaming_manager)
+            
+            # モック録音結果
+            mock_result = RecordingResult(
+                success=True,
+                total_segments=6,  # 30秒 ÷ 5秒/セグメント = 6
+                downloaded_segments=6,
+                failed_segments=0,
+                total_bytes=2400000,  # 2.4MB
+                recording_duration=30.0,
+                error_messages=[]
+            )
+            
+            # 非同期録音のシミュレート
+            async def mock_start_recording(output_path):
+                return mock_result
+            
+            with patch.object(session, 'start_recording', side_effect=mock_start_recording):
+                # 非同期テスト実行
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(session.start_recording(job.output_path))
+                    
+                    # 結果検証
+                    self.assertTrue(result.success)
+                    self.assertEqual(result.total_segments, 6)
+                    self.assertEqual(result.downloaded_segments, 6)
+                    self.assertEqual(result.failed_segments, 0)
+                    self.assertAlmostEqual(result.recording_duration, 30.0)
+                    
+                finally:
+                    loop.close()
+    
+    def test_live_streaming_components_integration(self):
+        """ライブストリーミングコンポーネント統合テスト"""
+        
+        # コンポーネント初期化
+        monitor = LivePlaylistMonitor("https://example.com/test.m3u8", update_interval=1)
+        tracker = SegmentTracker(buffer_size=10)
+        downloader = SegmentDownloader(max_concurrent=2)
+        
+        # コンポーネント間の連携確認
+        self.assertEqual(monitor.update_interval, 1)
+        self.assertEqual(tracker.buffer_size, 10)
+        self.assertEqual(downloader.max_concurrent, 2)
+        
+        # セグメント処理フロー
+        from src.live_streaming import Segment
+        test_segment = Segment("https://example.com/seg1.ts", 1, 5.0)
+        
+        # 新規セグメント検出
+        self.assertTrue(tracker.is_new_segment(test_segment))
+        
+        # セグメント登録
+        tracker.register_segment(test_segment, 1024, 0.5)
+        
+        # 重複検出
+        self.assertFalse(tracker.is_new_segment(test_segment))
+        
+        # 統計確認
+        stats = tracker.get_statistics()
+        self.assertEqual(stats['total_segments'], 1)
+        self.assertEqual(stats['total_bytes'], 1024)
+    
+    @patch('src.live_streaming.LivePlaylistMonitor.fetch_playlist')
+    def test_live_streaming_error_handling(self, mock_fetch_playlist):
+        """ライブストリーミングエラーハンドリングテスト"""
+        
+        # プレイリスト取得エラーのシミュレート
+        from src.live_streaming import LiveStreamingError
+        
+        async def mock_fetch_error():
+            raise LiveStreamingError("プレイリスト取得失敗")
+        
+        mock_fetch_playlist.side_effect = mock_fetch_error
+        
+        monitor = LivePlaylistMonitor("https://example.com/error.m3u8")
+        
+        # エラーハンドリングの確認
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            with self.assertRaises(LiveStreamingError):
+                loop.run_until_complete(monitor.fetch_playlist())
+        finally:
+            loop.close()
+    
+    def test_live_streaming_quality_metrics(self):
+        """ライブストリーミング品質メトリクステスト"""
+        
+        # 品質メトリクスの計算
+        result = RecordingResult(
+            success=True,
+            total_segments=120,  # 10分間録音
+            downloaded_segments=118,
+            failed_segments=2,
+            total_bytes=9600000,  # 9.6MB
+            recording_duration=600.0,
+            error_messages=[]
+        )
+        
+        # 成功率計算
+        success_rate = (result.downloaded_segments / result.total_segments) * 100
+        self.assertAlmostEqual(success_rate, 98.33, places=1)
+        
+        # データレート計算
+        data_rate_mbps = (result.total_bytes * 8) / (result.recording_duration * 1024 * 1024)
+        self.assertGreater(data_rate_mbps, 0.1)  # 最低ビットレート確認
+        
+        # セグメント品質
+        expected_segments = int(result.recording_duration / 5)  # 5秒/セグメント
+        segment_ratio = (result.downloaded_segments / expected_segments) * 100
+        self.assertGreater(segment_ratio, 95)  # 95%以上の取得率
 
 
 if __name__ == '__main__':

@@ -44,6 +44,7 @@ TEST_CATEGORY:
     system_operation システム稼働テスト (B1-B3)
     failure_recovery 障害復旧テスト (C1-C3)
     performance     パフォーマンステスト (D1-D3)
+    live_streaming  ライブストリーミングテスト (L1-L8)
     all            全テスト実行
 
 OPTIONS:
@@ -100,7 +101,7 @@ while [[ $# -gt 0 ]]; do
             ENABLE_MONITORING=true
             shift
             ;;
-        framework|user_journey|system_operation|failure_recovery|performance|all)
+        framework|user_journey|system_operation|failure_recovery|performance|live_streaming|all)
             TEST_CATEGORY="$1"
             shift
             ;;
@@ -266,6 +267,15 @@ with open('$REPORT_DIR/monitor.pid', 'w') as f:
             else
                 log "パフォーマンステストはまだ実装されていません"
                 return 0
+            fi
+            ;;
+        live_streaming)
+            if [[ -f "tests/e2e/test_live_streaming_e2e.py" ]]; then
+                log "ライブストリーミングE2Eテスト実行"
+                python -m pytest tests/e2e/test_live_streaming_e2e.py "${PYTEST_ARGS[@]}" -m live_streaming
+            else
+                log "ライブストリーミングテストが見つかりません"
+                return 1
             fi
             ;;
         all)

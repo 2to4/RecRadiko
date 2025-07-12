@@ -390,56 +390,106 @@ class RecordingManager:
             # ストリーミングURLを取得
             # ライブ録音の場合は現在時刻から録音開始
             now = datetime.now()
-            if job.start_time <= now <= job.end_time:
-                # 現在実行中の録音はライブストリーミング
-                stream_url = self.streaming_manager.get_stream_url(job.station_id)
-            else:
-                # 過去の時刻指定の場合はタイムフリー
+            is_live_recording = self._is_live_recording(job, now)
+            
+            if not is_live_recording:
+                # 従来の静的録音（タイムフリー）
                 stream_url = self.streaming_manager.get_stream_url(
                     job.station_id, job.start_time, job.end_time
                 )
-            
-            # プレイリストを解析
-            stream_info = self.streaming_manager.parse_playlist(stream_url)
-            
-            # 一時ファイルで録音
-            with tempfile.NamedTemporaryFile(suffix='.ts', delete=False) as tmp_file:
-                tmp_path = tmp_file.name
-            
-            try:
-                # 録音実行
-                self._record_stream(job, stream_info, tmp_path)
+                stream_info = self.streaming_manager.parse_playlist(stream_url)
                 
-                # 音声形式を変換
-                if job.format != 'ts':
-                    self._convert_audio(job, tmp_path, job.output_path)
-                else:
-                    # TSファイルはそのまま移動
-                    shutil.move(tmp_path, job.output_path)
+                # 一時ファイルで録音
+                with tempfile.NamedTemporaryFile(suffix='.ts', delete=False) as tmp_file:
+                    tmp_path = tmp_file.name
                 
-                # メタデータを追加
-                self._add_metadata(job)
-                
-                # 完了処理
-                job.status = RecordingStatus.COMPLETED
-                job.completed_at = datetime.now()
-                job.file_size = Path(job.output_path).stat().st_size
-                
-                self.logger.info(f"録音完了: {job.id} -> {job.output_path}")
-                
-            finally:
-                # 一時ファイルを削除
                 try:
-                    Path(tmp_path).unlink(missing_ok=True)
-                except Exception as e:
-                    self.logger.warning(f"一時ファイル削除エラー: {e}")
+                    # 静的録音実行
+                    self._record_stream_static(job, stream_info, tmp_path)
+                    
+                    # 音声形式を変換
+                    if job.format != 'ts':
+                        self._convert_audio(job, tmp_path, job.output_path)
+                    else:
+                        # TSファイルはそのまま移動
+                        shutil.move(tmp_path, job.output_path)
+                    
+                    # メタデータを追加
+                    self._add_metadata(job)
+                    
+                    # 完了処理
+                    job.status = RecordingStatus.COMPLETED
+                    job.completed_at = datetime.now()
+                    job.file_size = Path(job.output_path).stat().st_size
+                    
+                    self.logger.info(f"録音完了: {job.id} -> {job.output_path}")
+                    
+                finally:
+                    # 一時ファイルを削除
+                    try:
+                        Path(tmp_path).unlink(missing_ok=True)
+                    except Exception as e:
+                        self.logger.warning(f"一時ファイル削除エラー: {e}")
+            else:
+                # ライブストリーミング録音
+                self.logger.info(f"ライブストリーミング録音を開始: {job.id}")
+                self._record_stream_live(job)
             
         except Exception as e:
             self.logger.error(f"録音エラー {job.id}: {e}")
             self._handle_job_error(job, str(e))
     
-    def _record_stream(self, job: RecordingJob, stream_info, output_path: str):
-        """ストリームを録音"""
+    def _is_live_recording(self, job: RecordingJob, current_time: datetime) -> bool:
+        """ライブ録音判定"""
+        # 現在時刻が録音開始時刻と終了時刻の間にある場合はライブ録音
+        return (job.start_time <= current_time <= job.end_time)
+    
+    def _record_stream_live(self, job: RecordingJob):
+        """ライブストリーミング録音（新メソッド）"""
+        try:
+            # live_streaming モジュールをここでインポート（循環インポート回避）
+            from .live_streaming import LiveRecordingSession
+            
+            # ライブ録音セッション作成
+            live_session = LiveRecordingSession(job, self.streaming_manager)
+            
+            # 非同期録音をイベントループで実行
+            import asyncio
+            
+            # 新しいイベントループを作成（スレッド内での実行のため）
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                # ライブ録音実行
+                result = loop.run_until_complete(
+                    live_session.start_recording(job.output_path)
+                )
+                
+                # 結果を反映
+                if result.success:
+                    job.status = RecordingStatus.COMPLETED
+                    job.file_size = result.total_bytes
+                    self.logger.info(f"ライブ録音完了: {job.id} - {result.downloaded_segments}セグメント")
+                else:
+                    job.status = RecordingStatus.FAILED
+                    job.error_message = "; ".join(result.error_messages)
+                    self.logger.error(f"ライブ録音失敗: {job.id} - {job.error_message}")
+                
+                job.completed_at = datetime.now()
+                
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            self.logger.error(f"ライブ録音セッションエラー {job.id}: {e}")
+            job.status = RecordingStatus.FAILED
+            job.error_message = str(e)
+            job.completed_at = datetime.now()
+    
+    def _record_stream_static(self, job: RecordingJob, stream_info, output_path: str):
+        """静的プレイリスト録音（既存ロジック）"""
+        # 既存の_record_streamロジックをリネームして使用
         job.status = RecordingStatus.RECORDING
         
         start_time = time.time()
@@ -479,11 +529,13 @@ class RecordingManager:
                     self.logger.warning(f"進捗コールバックエラー: {e}")
         
         # 録音時間制限（秒）
-        max_recording_time = getattr(job, 'duration_seconds', 300)  # デフォルト5分
+        max_recording_time = job.duration_seconds
         if max_recording_time <= 0:
             max_recording_time = 300  # 無効な値の場合のフォールバック
+            self.logger.warning(f"録音時間が無効（{job.duration_seconds}秒）、デフォルト5分を使用")
         
-        self.logger.info(f"録音時間制限: {max_recording_time}秒 ({max_recording_time//60}分)")
+        self.logger.info(f"静的録音時間制限: {max_recording_time}秒 ({max_recording_time//60}分)")
+        self.logger.debug(f"ジョブの詳細: start_time={job.start_time}, end_time={job.end_time}, duration_seconds={job.duration_seconds}")
         recording_start_time = time.time()
         
         # セグメントをダウンロードして保存
@@ -493,11 +545,12 @@ class RecordingManager:
             ):
                 # 録音時間制限チェック
                 if time.time() - recording_start_time >= max_recording_time:
-                    self.logger.info(f"録音時間制限に到達: {max_recording_time}秒")
+                    self.logger.info(f"静的録音時間制限に到達: {max_recording_time}秒")
                     break
                 
                 output_file.write(segment_data)
                 bytes_written += len(segment_data)
+    
     
     def _convert_audio(self, job: RecordingJob, input_path: str, output_path: str):
         """音声形式を変換"""

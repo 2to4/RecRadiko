@@ -224,37 +224,6 @@ class TestCLIIntegration(unittest.TestCase):
         self.assertIn("システム状態", output)
         self.assertIn("ストレージ", output)
 
-    @unittest.skip("対話型モードではshow-config/configコマンドが未実装のため無効")
-    def test_cli_config_management_integration(self):
-        """CLI設定管理の統合テスト（無効化）"""
-        
-        # CLIインスタンス作成
-        cli = RecRadikoCLI(config_path=self.config_path)
-        
-        # 設定表示コマンド
-        with redirect_stdout(io.StringIO()) as captured_output:
-            exit_code = cli._execute_interactive_command(['show-config'])
-        
-        # 結果検証
-        self.assertEqual(exit_code, 0, "show-configコマンドが成功する必要があります")
-        
-        # 出力内容の確認
-        output = captured_output.getvalue()
-        self.assertIn("現在の設定", output)
-        self.assertIn("area_id", output)
-        self.assertIn("JP13", output)
-        
-        # 設定変更コマンド
-        with redirect_stdout(io.StringIO()) as captured_output:
-            exit_code = cli._execute_interactive_command(['config', '--area-id', 'JP27', '--format', 'mp3'])
-        
-        # 結果検証
-        self.assertEqual(exit_code, 0, "configコマンドが成功する必要があります")
-        
-        # 設定の反映確認
-        updated_config = cli._load_config()
-        self.assertEqual(updated_config['area_id'], 'JP27')
-        self.assertEqual(updated_config['default_format'], 'mp3')
 
     def test_cli_list_commands_integration(self):
         """CLIリストコマンドの統合テスト"""

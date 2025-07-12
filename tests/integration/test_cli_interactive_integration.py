@@ -162,39 +162,38 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
             self.assertIn("QRR", output)
             self.assertIn("文化放送", output)
     
-    @patch('src.program_info.requests.get')
-    def test_interactive_list_programs_integration(self, mock_get):
+    def test_interactive_list_programs_integration(self):
         """番組表取得の統合テスト"""
-        # モックレスポンス設定
-        mock_response = Mock()
-        mock_response.status_code = 200
+        # 番組情報マネージャーのモック設定
         now = datetime.now()
-        mock_response.content = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <radiko>
-            <stations>
-                <station id="TBS">
-                    <progs>
-                        <prog id="prog1" 
-                              ft="{int(now.timestamp())}" 
-                              to="{int((now + timedelta(hours=1)).timestamp())}"
-                              ftl="{now.strftime('%Y%m%d%H%M%S')}"
-                              tol="{(now + timedelta(hours=1)).strftime('%Y%m%d%H%M%S')}">
-                            <title>ニュース番組</title>
-                            <pfm>アナウンサーA</pfm>
-                        </prog>
-                        <prog id="prog2"
-                              ft="{int((now + timedelta(hours=1)).timestamp())}"
-                              to="{int((now + timedelta(hours=2)).timestamp())}"
-                              ftl="{(now + timedelta(hours=1)).strftime('%Y%m%d%H%M%S')}"
-                              tol="{(now + timedelta(hours=2)).strftime('%Y%m%d%H%M%S')}">
-                            <title>音楽番組</title>
-                            <pfm>DJ B,ゲスト C</pfm>
-                        </prog>
-                    </progs>
-                </station>
-            </stations>
-        </radiko>""".encode('utf-8')
-        mock_get.return_value = mock_response
+        mock_programs = [
+            Program(
+                id="prog1",
+                station_id="TBS", 
+                title="ニュース番組",
+                start_time=now,
+                end_time=now + timedelta(hours=1),
+                duration=60,
+                description="ニュース",
+                performers=["アナウンサーA"],
+                genre="ニュース"
+            ),
+            Program(
+                id="prog2",
+                station_id="TBS",
+                title="音楽番組", 
+                start_time=now + timedelta(hours=1),
+                end_time=now + timedelta(hours=2),
+                duration=60,
+                description="音楽",
+                performers=["DJ B", "ゲスト C"],
+                genre="音楽"
+            )
+        ]
+        
+        # プログラム情報マネージャーのモック
+        self.cli.program_info_manager = Mock()
+        self.cli.program_info_manager.fetch_program_guide.return_value = mock_programs
         
         with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
             result = self.cli._execute_interactive_command(['list-programs', '--station', 'TBS'])
@@ -203,9 +202,8 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
             # 検証
             self.assertEqual(result, 0)
             self.assertIn("番組表", output)
-            # 実際の番組表データに基づく期待値（キャッシュされたデータ）
-            self.assertTrue("森本毅郎" in output or "ニュース番組" in output, "番組名が見つかりません")
-            self.assertTrue("出演:" in output or "出演者情報があります")
+            self.assertIn("ニュース番組", output)
+            self.assertIn("出演:", output)
     
     def test_interactive_list_recordings_integration(self):
         """録音ファイル一覧の統合テスト"""
@@ -327,7 +325,7 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertIn("RecRadiko 対話型モード", output)
             self.assertIn("利用可能なコマンド", output)  # ヘルプ
-            self.assertIn("システム状況", output)       # status
+            self.assertIn("システム状態", output)       # status
             self.assertIn("統計情報", output)          # stats
             self.assertIn("録音予約一覧", output)      # list-schedules
             self.assertIn("RecRadikoを終了します", output)
@@ -407,7 +405,7 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
             expected_outputs = [
                 "利用可能なコマンド",  # help
                 "放送局一覧",         # list-stations
-                "システム状況",       # status
+                "システム状態",       # status
                 "録音予約一覧",       # list-schedules
                 "統計情報",          # stats
                 "録音ファイル一覧"    # list-recordings

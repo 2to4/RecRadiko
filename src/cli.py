@@ -484,7 +484,12 @@ class RecRadikoCLI:
             
             # ジョブオブジェクトを取得
             job = self.recording_manager.get_job_status(job_id)
-            print(f"録音を開始しました: {job}")
+            if job:
+                print(f"録音を開始しました: {job}")
+                if hasattr(job, 'duration_seconds') and job.duration_seconds:
+                    print(f"録音時間: {job.duration_seconds}秒 ({job.duration_seconds//60}分)")
+            else:
+                print(f"録音ジョブを作成しました: {job_id}")
             
             # 録音開始
             self.recording_manager.schedule_recording(job_id)
@@ -787,7 +792,7 @@ class RecRadikoCLI:
     def _cmd_status(self, args):
         """システム状態コマンド"""
         try:
-            print("システム状況:")
+            print("システム状態:")
             print("-" * 40)
             
             # 認証状態
@@ -949,7 +954,7 @@ class RecRadikoCLI:
   list-programs [--station <ID>]       - 番組表を表示
   list-schedules                       - 録音予約一覧を表示
   list-recordings                      - 録音ファイル一覧を表示
-  status                               - システム状況を表示
+  status                               - システム状態を表示
   stats                                - 統計情報を表示
   help                                 - このヘルプを表示
   exit                                 - プログラムを終了

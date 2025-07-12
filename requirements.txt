@@ -3,6 +3,9 @@
 # HTTP通信
 requests>=2.31.0
 
+# 非同期HTTP通信（ライブストリーミング用）
+aiohttp>=3.9.0
+
 # XML解析
 lxml>=4.9.0
 
@@ -36,6 +39,7 @@ plyer>=2.1.0
 # 開発・テスト用依存関係（オプション）
 pytest>=7.4.0
 pytest-cov>=4.1.0
+pytest-asyncio>=1.0.0  # 非同期テスト用
 coverage>=7.3.0
 black>=23.7.0
 flake8>=6.0.0
@@ -43,6 +47,7 @@ mypy>=1.5.0
 
 # テスト用追加ライブラリ
 # unittest.mock is included in Python 3.3+ standard library
+nest-asyncio>=1.5.0  # 非同期テスト用
 
 # ログ処理
 # logging is included in Python standard library
