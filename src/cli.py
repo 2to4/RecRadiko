@@ -28,6 +28,7 @@ from .file_manager import FileManager, FileManagerError
 from .scheduler import RecordingScheduler, RepeatPattern, ScheduleStatus, SchedulerError
 from .error_handler import ErrorHandler, handle_error
 from .logging_config import setup_logging, get_logger
+from .region_mapper import RegionMapper
 
 
 class RecRadikoCLI:
@@ -52,11 +53,13 @@ class RecRadikoCLI:
         else:
             self.config_path = Path(config_path)
         
+        # 基本ログ設定（設定ロード前に必要）
+        self.logger = get_logger(__name__)
+        
         self.config = self._load_config()
         
-        # ログ設定
+        # 詳細ログ設定
         self._setup_logging()
-        self.logger = get_logger(__name__)
         
         # コンポーネント初期化（依存性注入対応）
         self.auth_manager = auth_manager
@@ -100,9 +103,10 @@ class RecRadikoCLI:
         self._initialize_components()
     
     def _load_config(self) -> Dict[str, Any]:
-        """設定ファイルを読み込み"""
+        """設定ファイルを読み込み（都道府県名→地域ID自動変換対応）"""
         default_config = {
             "area_id": "JP13",
+            "prefecture": "",  # 都道府県名（日本語・英語対応）
             "premium_username": "",
             "premium_password": "",
             "output_dir": "./recordings",
@@ -127,15 +131,127 @@ class RecRadikoCLI:
                     config = json.load(f)
                 # デフォルト値とマージ
                 default_config.update(config)
+                
+                # 都道府県名から地域IDを自動設定
+                self._process_prefecture_setting(default_config)
             else:
                 # デフォルト設定ファイルを作成
                 self._save_config(default_config)
-            
+                
             return default_config
             
         except Exception as e:
-            print(f"設定ファイル読み込みエラー: {e}")
+            self.logger.error(f"設定ファイル読み込みエラー: {e}")
             return default_config
+    
+    def _process_prefecture_setting(self, config: Dict[str, Any]) -> None:
+        """都道府県名から地域IDを自動設定"""
+        try:
+            prefecture = config.get("prefecture", "").strip()
+            
+            # 都道府県名が設定されている場合
+            if prefecture:
+                area_id = RegionMapper.get_area_id(prefecture)
+                
+                if area_id:
+                    # 地域IDをメモリ内でのみ自動設定（ファイルには書き込まない）
+                    original_area_id = config.get("area_id", "")
+                    config["area_id"] = area_id
+                    
+                    prefecture_ja = RegionMapper.get_prefecture_name(area_id)
+                    self.logger.info(f"都道府県設定から地域ID自動設定: {prefecture} -> {area_id} ({prefecture_ja})")
+                    
+                    # 既存のarea_idと異なる場合は警告
+                    if original_area_id and original_area_id != area_id:
+                        self.logger.warning(
+                            f"地域ID設定を上書き: {original_area_id} -> {area_id} "
+                            f"(都道府県設定: {prefecture})"
+                        )
+                    
+                else:
+                    self.logger.warning(f"不明な都道府県名: '{prefecture}' - 利用可能な都道府県名を確認してください")
+                    self._show_available_prefectures()
+            
+            # area_idの妥当性チェック
+            elif config.get("area_id"):
+                area_id = config["area_id"]
+                if not RegionMapper.validate_area_id(area_id):
+                    self.logger.warning(f"不正な地域ID: {area_id} - デフォルト地域ID（JP13：東京）を使用")
+                    config["area_id"] = RegionMapper.get_default_area_id()
+            
+            # 都道府県名もarea_idも設定されていない場合はデフォルト地域IDを使用
+            else:
+                config["area_id"] = RegionMapper.get_default_area_id()
+                self.logger.info(f"地域設定がありません - デフォルト地域ID（JP13：東京）を使用")
+            
+        except Exception as e:
+            self.logger.error(f"都道府県設定処理エラー: {e}")
+            # エラー時もデフォルト地域IDを設定
+            config["area_id"] = RegionMapper.get_default_area_id()
+    
+    def _update_config_file(self, config: Dict[str, Any]) -> None:
+        """設定ファイルを更新"""
+        try:
+            # 現在の設定ファイルを読み込み
+            if self.config_path.exists():
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    file_config = json.load(f)
+                
+                # area_idのみ更新
+                file_config["area_id"] = config["area_id"]
+                
+                # ファイルに書き戻し
+                with open(self.config_path, 'w', encoding='utf-8') as f:
+                    json.dump(file_config, f, ensure_ascii=False, indent=2)
+                
+                self.logger.debug("設定ファイルを更新しました")
+        
+        except Exception as e:
+            self.logger.warning(f"設定ファイル更新エラー: {e}")
+    
+    def _show_available_prefectures(self) -> None:
+        """利用可能な都道府県名を表示"""
+        try:
+            prefectures = RegionMapper.list_all_prefectures()
+            self.logger.info("利用可能な都道府県名:")
+            
+            # 地方別にグループ化して表示
+            regions = {}
+            for area_id, info in RegionMapper.REGION_INFO.items():
+                region = info.region_name
+                if region not in regions:
+                    regions[region] = []
+                regions[region].append(f"{info.prefecture_ja} ({area_id})")
+            
+            for region, prefs in regions.items():
+                self.logger.info(f"  {region}: {', '.join(prefs)}")
+            
+            self.logger.info("設定例: \"prefecture\": \"大阪\" または \"prefecture\": \"Osaka\"")
+            
+        except Exception as e:
+            self.logger.error(f"都道府県一覧表示エラー: {e}")
+    
+    def get_current_prefecture_info(self) -> Dict[str, str]:
+        """現在の地域設定情報を取得"""
+        area_id = self.config.get("area_id", "JP13")
+        region_info = RegionMapper.get_region_info(area_id)
+        
+        if region_info:
+            return {
+                "area_id": area_id,
+                "prefecture_ja": region_info.prefecture_ja,
+                "prefecture_en": region_info.prefecture_en,
+                "region_name": region_info.region_name,
+                "major_stations": region_info.major_stations
+            }
+        else:
+            return {
+                "area_id": area_id,
+                "prefecture_ja": "不明",
+                "prefecture_en": "Unknown",
+                "region_name": "不明",
+                "major_stations": []
+            }
     
     def _save_config(self, config: Dict[str, Any]):
         """設定ファイルを保存"""
@@ -144,7 +260,7 @@ class RecRadikoCLI:
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"設定ファイル保存エラー: {e}")
+            self.logger.error(f"設定ファイル保存エラー: {e}")
     
     def _setup_logging(self):
         """ログ設定"""
@@ -748,6 +864,68 @@ class RecRadikoCLI:
         
         return 0
     
+    def _cmd_show_region(self, args):
+        """地域情報表示コマンド"""
+        try:
+            prefecture_info = self.get_current_prefecture_info()
+            
+            print("現在の地域設定:")
+            print("-" * 40)
+            print(f"地域ID:         {prefecture_info['area_id']}")
+            print(f"都道府県名:     {prefecture_info['prefecture_ja']}")
+            print(f"英語名:         {prefecture_info['prefecture_en']}")
+            print(f"地方:           {prefecture_info['region_name']}")
+            print(f"主要放送局:     {', '.join(prefecture_info['major_stations'])}")
+            
+            # 設定方法の説明
+            print("\n地域設定の変更方法:")
+            print("-" * 40)
+            print("config.jsonの 'prefecture' フィールドに都道府県名を設定してください")
+            print("例: \"prefecture\": \"大阪\" または \"prefecture\": \"Osaka\"")
+            
+        except Exception as e:
+            print(f"地域情報表示エラー: {e}")
+            return 1
+        
+        return 0
+    
+    def _cmd_list_prefectures(self, args):
+        """全都道府県一覧表示コマンド"""
+        try:
+            print("利用可能な都道府県一覧:")
+            print("=" * 50)
+            
+            # 地方別にグループ化して表示
+            regions = {}
+            for area_id, info in RegionMapper.REGION_INFO.items():
+                region = info.region_name
+                if region not in regions:
+                    regions[region] = []
+                regions[region].append({
+                    'prefecture_ja': info.prefecture_ja,
+                    'prefecture_en': info.prefecture_en,
+                    'area_id': area_id,
+                    'stations': info.major_stations
+                })
+            
+            for region, prefs in regions.items():
+                print(f"\n【{region}】")
+                print("-" * 20)
+                for pref in prefs:
+                    stations_str = f" ({', '.join(pref['stations'][:3])}{'...' if len(pref['stations']) > 3 else ''})"
+                    print(f"  {pref['prefecture_ja']:8} ({pref['area_id']}) / {pref['prefecture_en']:12}{stations_str}")
+            
+            print("\n設定例:")
+            print("  \"prefecture\": \"大阪\"     # 日本語名")
+            print("  \"prefecture\": \"Osaka\"    # 英語名")
+            print("  \"prefecture\": \"osaka\"    # 小文字でも可")
+            
+        except Exception as e:
+            print(f"都道府県一覧表示エラー: {e}")
+            return 1
+        
+        return 0
+    
     def _cmd_config(self, args):
         """設定変更コマンド"""
         changes = {}
@@ -954,6 +1132,8 @@ class RecRadikoCLI:
   list-programs [--station <ID>]       - 番組表を表示
   list-schedules                       - 録音予約一覧を表示
   list-recordings                      - 録音ファイル一覧を表示
+  show-region                          - 現在の地域設定を表示
+  list-prefectures                     - 全都道府県一覧を表示
   status                               - システム状態を表示
   stats                                - 統計情報を表示
   help                                 - このヘルプを表示
@@ -1036,6 +1216,12 @@ class RecRadikoCLI:
                 args.station = None
                 args.search = None
                 return self._cmd_list_recordings(args)
+            
+            elif command == 'show-region':
+                return self._cmd_show_region(args)
+            
+            elif command == 'list-prefectures':
+                return self._cmd_list_prefectures(args)
             
             elif command == 'status':
                 return self._cmd_status(args)

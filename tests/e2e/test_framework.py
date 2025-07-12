@@ -70,8 +70,8 @@ class TestE2EFramework:
         # 設定ファイルが作成されている
         assert os.path.exists(config_path)
         
-        # 必要な設定項目が含まれている
-        assert "area_id" in config_dict
+        # 必要な設定項目が含まれている（新設計では prefecture を確認）
+        assert "prefecture" in config_dict
         assert "output_dir" in config_dict
         assert "e2e_test" in config_dict
         assert config_dict["e2e_test"]["time_acceleration"] == 100

@@ -43,7 +43,7 @@ class TestCLIIntegration(unittest.TestCase):
         
         # テスト用設定
         self.test_config = {
-            "area_id": "JP13",
+            "prefecture": "東京",  # area_id JP13 に対応
             "output_dir": self.output_dir,
             "max_concurrent_recordings": 2,
             "default_format": "aac",
@@ -365,9 +365,9 @@ class TestCLIIntegration(unittest.TestCase):
         cli.file_manager = Mock()
         cli.scheduler = Mock()
         
-        # 設定変更
+        # 設定変更（都道府県名による地域設定）
         new_config = {
-            'area_id': 'JP27',
+            'prefecture': '大阪',  # area_id JP27 に対応
             'output_dir': os.path.join(self.temp_dir, 'new_recordings'),
             'max_concurrent_recordings': 4,
             'default_format': 'mp3',
@@ -376,17 +376,20 @@ class TestCLIIntegration(unittest.TestCase):
         
         # 設定更新
         cli.config.update(new_config)
+        # 都道府県名から地域IDを自動設定（新しい設計での必須処理）
+        cli._process_prefecture_setting(cli.config)
         cli._save_config(cli.config)
         
         # 設定の反映確認
         updated_config = cli._load_config()
-        self.assertEqual(updated_config['area_id'], 'JP27')
+        # 注意: 新しい設計では prefecture のみがファイルに保存され、area_id は自動変換される
+        self.assertEqual(updated_config['prefecture'], '大阪')
         self.assertEqual(updated_config['default_format'], 'mp3')
         self.assertEqual(updated_config['max_concurrent_recordings'], 4)
         
-        # モジュールへの設定反映の確認（実際の実装では各モジュールが設定を使用）
+        # メモリ内でのarea_id自動変換確認（都道府県名から変換されたもの）
         # ここではCLIが適切に設定を管理していることを確認
-        self.assertEqual(cli.config['area_id'], 'JP27')
+        self.assertEqual(cli.config['area_id'], 'JP27')  # "大阪" -> "JP27"
 
     def test_cli_help_and_usage_integration(self):
         """CLIヘルプと使用方法の統合テスト"""

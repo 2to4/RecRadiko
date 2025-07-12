@@ -186,7 +186,7 @@ RecRadiko> exit
 
 ```json
 {
-  "area_id": "JP13",
+  "prefecture": "東京",
   "output_dir": "./recordings",
   "max_concurrent_recordings": 4,
   "auto_cleanup_enabled": true,
@@ -214,6 +214,39 @@ RecRadiko> exit
   }
 }
 ```
+
+### 🗾 地域設定（都道府県名対応）
+
+RecRadikoでは、**都道府県名**を設定するだけで自動的に適切な地域IDが設定されます。
+
+#### 対応都道府県名
+```json
+{
+  "prefecture": "東京"      // 東京都 → JP13
+  "prefecture": "大阪"      // 大阪府 → JP27  
+  "prefecture": "北海道"    // 北海道 → JP1
+  "prefecture": "愛知"      // 愛知県 → JP23
+  "prefecture": "福岡"      // 福岡県 → JP40
+  // ... 47都道府県すべてに対応
+}
+```
+
+#### 使用できる都道府県名の形式
+- **日本語**: `"東京"`, `"東京都"`, `"大阪"`, `"大阪府"`, `"北海道"`
+- **英語**: `"Tokyo"`, `"Osaka"`, `"Hokkaido"` (大文字・小文字問わず)
+- **部分名**: `"東京"` (「都」「府」「県」は自動判定)
+
+#### 利用可能な都道府県一覧の確認
+```bash
+# 対話型モードで都道府県一覧を表示
+python RecRadiko.py
+> list-prefectures
+
+# 現在の地域設定を確認
+> show-region
+```
+
+**💡 ヒント**: 地域IDの設定は不要になりました。都道府県名のみ設定すれば、内部で自動的に正しい地域IDに変換されます。
 
 ### プレミアム認証設定
 
@@ -460,7 +493,7 @@ cli = RecRadikoCLI()
 
 ```json
 {
-  "area_id": "JP13",
+  "prefecture": "東京",
   "output_dir": "~/Music/Radio",
   "max_concurrent_recordings": 2,
   "auto_cleanup_enabled": true,
@@ -491,7 +524,7 @@ cli = RecRadikoCLI()
 
 ```json
 {
-  "area_id": "JP13",
+  "prefecture": "東京",
   "output_dir": "/var/recordings",
   "max_concurrent_recordings": 8,
   "auto_cleanup_enabled": true,
@@ -578,13 +611,15 @@ MIT License
 
 ## 📚 参考情報
 
-### 対応地域ID
+### 対応都道府県名
 
-- `JP13`: 東京都
-- `JP27`: 大阪府  
-- `JP14`: 神奈川県
-- `JP23`: 愛知県
-- 他の地域IDは[Radiko公式サイト](https://radiko.jp/)で確認
+RecRadikoでは都道府県名で地域を指定できます。設定時は以下の形式で指定可能：
+
+- **正式名称**: `東京都`、`大阪府`、`神奈川県`、`愛知県`
+- **略称**: `東京`、`大阪`、`神奈川`、`愛知`
+- **英語名**: `Tokyo`、`Osaka`、`Kanagawa`、`Aichi`
+
+**💡 ヒント**: 都道府県名を設定すると、内部で自動的に適切な地域ID（JP13、JP27等）に変換されます。地域IDを直接指定する必要はありません。
 
 ### 主要放送局ID
 

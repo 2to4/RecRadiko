@@ -34,7 +34,7 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
         
         # テスト用設定
         self.test_config = {
-            "area_id": "JP13",
+            "prefecture": "東京",  # area_id JP13 に対応
             "output_dir": str(self.output_dir),
             "max_concurrent_recordings": 2,
             "notification_enabled": False,
@@ -369,8 +369,8 @@ class TestCLIInteractiveIntegration(unittest.TestCase):
     
     def test_interactive_config_loading_integration(self):
         """対話型モードでの設定読み込み統合テスト"""
-        # 設定内容の確認
-        self.assertEqual(self.cli.config['area_id'], 'JP13')
+        # 設定内容の確認（都道府県名から自動変換されたarea_idの確認）
+        self.assertEqual(self.cli.config['area_id'], 'JP13')  # "東京" -> "JP13"
         self.assertEqual(self.cli.config['output_dir'], str(self.output_dir))
         self.assertEqual(self.cli.config['recording']['default_format'], 'mp3')
         

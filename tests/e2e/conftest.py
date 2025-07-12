@@ -77,7 +77,7 @@ def temp_environment():
 def test_config(temp_environment):
     """E2Eテスト用の設定ファイル生成"""
     config = {
-        "area_id": "JP13",
+        "prefecture": "東京",  # area_id JP13 に対応
         "output_dir": temp_environment["output_dir"],
         "max_concurrent_recordings": 8,
         "auto_cleanup_enabled": True,

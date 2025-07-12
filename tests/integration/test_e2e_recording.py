@@ -46,7 +46,7 @@ class TestEndToEndRecording(unittest.TestCase):
         
         # テスト用の設定
         self.test_config = {
-            "area_id": "JP13",
+            "prefecture": "東京",  # area_id JP13 に対応
             "output_dir": self.output_dir,
             "max_concurrent_recordings": 2,
             "default_format": "aac",
@@ -428,7 +428,7 @@ class TestLiveStreamingIntegrationE2E(unittest.TestCase):
         
         # ライブストリーミング設定
         self.test_config = {
-            "area_id": "JP13",
+            "prefecture": "東京",  # area_id JP13 に対応
             "output_dir": self.output_dir,
             "max_concurrent_recordings": 2,
             "live_streaming_enabled": True,

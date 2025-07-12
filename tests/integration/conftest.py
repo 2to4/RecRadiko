@@ -27,7 +27,7 @@ from src.file_manager import FileMetadata, StorageInfo
 def integration_test_config():
     """結合テスト用の共通設定"""
     return {
-        "area_id": "JP13",
+        "prefecture": "東京",  # area_id JP13 に対応
         "max_concurrent_recordings": 2,
         "default_format": "aac",
         "default_bitrate": 128,

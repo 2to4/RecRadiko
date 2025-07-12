@@ -65,7 +65,7 @@ nano config.json  # または好みのエディタ
 ### 基本設定（config.json）
 ```json
 {
-  "area_id": "JP13",                    # お住まいの地域ID
+  "prefecture": "東京",                 # お住まいの都道府県名
   "output_dir": "./recordings",         # 録音ファイル保存先
   "max_concurrent_recordings": 4,       # 同時録音数
   "recording": {
@@ -75,13 +75,15 @@ nano config.json  # または好みのエディタ
 }
 ```
 
-### 地域ID一覧
-| 地域 | ID | 主要放送局 |
-|------|----|-----------| 
-| 東京都 | JP13 | TBS、文化放送、ニッポン放送 |
-| 大阪府 | JP27 | MBS、ABC、関西放送 |
-| 神奈川県 | JP14 | tvk、FMヨコハマ |
-| 愛知県 | JP23 | CBC、東海ラジオ |
+### 都道府県名設定
+| 都道府県名 | 内部地域ID | 主要放送局 |
+|------------|------------|-----------|
+| 東京・東京都 | JP13 | TBS、文化放送、ニッポン放送 |
+| 大阪・大阪府 | JP27 | MBS、ABC、関西放送 |
+| 神奈川・神奈川県 | JP14 | tvk、FMヨコハマ |
+| 愛知・愛知県 | JP23 | CBC、東海ラジオ |
+
+**💡 ヒント**: 47都道府県すべてに対応しています。正式名称・略称・英語名での指定が可能です。
 
 ### プレミアム認証設定（オプション）
 ```json
@@ -106,6 +108,12 @@ python RecRadiko.py
 
 # 放送局一覧確認
 RecRadiko> list-stations
+
+# 現在の地域設定確認
+RecRadiko> show-region
+
+# 利用可能な都道府県一覧
+RecRadiko> list-prefectures
 ```
 
 ### 2. 録音テスト
@@ -125,7 +133,7 @@ RecRadiko> list-recordings
 # 全テスト実行
 python -m pytest tests/ -v
 
-# 結果: 346/346 テスト成功を確認
+# 結果: 342/342 テスト成功を確認
 ```
 
 ## 🔧 トラブルシューティング

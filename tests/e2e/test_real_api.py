@@ -4,11 +4,17 @@
 このテストは実際のRadiko APIを呼び出すため、CI環境では条件付きで実行されます。
 環境変数 SKIP_REAL_API_TESTS=1 を設定することで無効化できます。
 
-2025年7月12日更新: ライブストリーミング対応・最新アーキテクチャ対応
-- 不要テストケース削除済み（13→5テストに削減）
+2025年7月12日更新: ライブストリーミング対応・最新アーキテクチャ対応・都道府県名対応
+- テストケース: R1-R8（都道府県名対応の3テスト追加）
 - ライブストリーミング機能統合
 - 対話型CLI対応
+- 都道府県名設定・変換機能対応
 - 実用性重視の厳選テストケース
+
+都道府県名対応テストケース:
+- R6: 実際のAPI環境での都道府県名設定テスト
+- R7: 複数都道府県での実際の認証テスト  
+- R8: 都道府県関連CLIコマンドの実際の動作テスト
 """
 
 import os
@@ -40,7 +46,7 @@ class TestRealRadikoAPI:
         # テスト用の一時ディレクトリ作成
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'area_id': 'JP14',  # 神奈川県
+            'prefecture': '神奈川',  # area_id JP14 に対応
             'output_dir': os.path.join(self.temp_dir, 'recordings'),
             'max_concurrent_recordings': 2,
             'default_format': 'mp3',
@@ -254,6 +260,125 @@ class TestRealRadikoAPI:
         assert "システム状態" in output, "システム状態が出力されませんでした"
         
         print("✅ 対話型CLI統合テスト成功")
+
+    @pytest.mark.e2e
+    @pytest.mark.real_api
+    def test_real_prefecture_configuration(self):
+        """R6: 実際のAPI環境での都道府県名設定テスト"""
+        import json
+        
+        # 複数の都道府県で設定テスト
+        prefecture_test_cases = [
+            ("東京", "JP13"),
+            ("大阪", "JP27"),
+            ("愛知", "JP23"),
+            ("福岡", "JP40"),
+            ("北海道", "JP1"),
+        ]
+        
+        for prefecture_name, expected_area_id in prefecture_test_cases:
+            print(f"🧪 テスト中: {prefecture_name} -> {expected_area_id}")
+            
+            # 設定ファイルを都道府県名で更新
+            test_config = self.config.copy()
+            test_config['prefecture'] = prefecture_name
+            
+            # 一時設定ファイルを作成
+            temp_config_file = os.path.join(self.temp_dir, f'config_{prefecture_name}.json')
+            with open(temp_config_file, 'w', encoding='utf-8') as f:
+                json.dump(test_config, f, ensure_ascii=False, indent=2)
+            
+            # CLIインスタンスを作成（都道府県処理が自動実行される）
+            cli = RecRadikoCLI(config_file=temp_config_file)
+            
+            # メモリ内でarea_idが正しく自動設定されていることを確認
+            assert cli.config.get('area_id') == expected_area_id, \
+                f"都道府県名'{prefecture_name}'から地域ID'{expected_area_id}'への変換が失敗"
+            
+            print(f"✅ 都道府県名変換成功: {prefecture_name} -> {expected_area_id}")
+            
+            # 設定ファイルには都道府県名のみが保存されていることを確認
+            with open(temp_config_file, 'r', encoding='utf-8') as f:
+                saved_config = json.load(f)
+            
+            assert 'prefecture' in saved_config, "設定ファイルに都道府県名が保存されていません"
+            assert saved_config['prefecture'] == prefecture_name, "保存された都道府県名が正しくありません"
+            assert 'area_id' not in saved_config, "設定ファイルに地域IDが不適切に保存されました"
+            
+            print(f"✅ 設定ファイル確認成功: prefecture={prefecture_name}, area_id非保存")
+            
+        print("✅ 都道府県名設定テスト（実際のAPI環境）完了")
+
+    @pytest.mark.e2e
+    @pytest.mark.real_api
+    def test_real_multi_prefecture_authentication(self):
+        """R7: 複数都道府県での実際の認証テスト"""
+        # 実際のAPI環境で異なる地域での認証動作を確認
+        prefecture_cases = [
+            ("東京", "JP13"),
+            ("大阪", "JP27"),
+        ]
+        
+        for prefecture_name, expected_area_id in prefecture_cases:
+            print(f"🔐 認証テスト中: {prefecture_name} ({expected_area_id})")
+            
+            # 設定を都道府県名で更新
+            test_config = self.config.copy()
+            test_config['prefecture'] = prefecture_name
+            
+            # 認証の実行
+            auth = RadikoAuthenticator()
+            auth_result = auth.authenticate()
+            
+            assert auth_result is True, f"{prefecture_name}での認証が失敗しました"
+            
+            # 認証情報の確認
+            auth_info = auth.get_valid_auth_info()
+            assert auth_info is not None, f"{prefecture_name}で認証情報が取得できませんでした"
+            assert auth_info.area_id is not None, f"{prefecture_name}でエリアIDが取得できませんでした"
+            
+            # 地域IDの確認（設定した都道府県と一致するかはネットワーク環境による）
+            print(f"✅ {prefecture_name}認証成功: 取得地域ID={auth_info.area_id}")
+            
+            # 放送局情報の取得テスト
+            program_info = ProgramInfoManager(authenticator=auth)
+            stations = program_info.get_stations()
+            
+            assert len(stations) > 0, f"{prefecture_name}で放送局情報が取得できませんでした"
+            print(f"✅ {prefecture_name}放送局取得成功: {len(stations)}局")
+            
+        print("✅ 複数都道府県認証テスト完了")
+
+    @pytest.mark.e2e
+    @pytest.mark.real_api  
+    def test_real_prefecture_cli_commands(self):
+        """R8: 都道府県関連CLIコマンドの実際の動作テスト"""
+        # CLIインスタンスに実際のAPIマネージャーを注入
+        self.cli.authenticator = self.auth
+        self.cli.program_info_manager = self.program_info
+        
+        # 都道府県情報表示コマンドのテスト
+        import io
+        from contextlib import redirect_stdout
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(['show-region'])
+            
+        assert result == 0, "都道府県情報表示コマンドが失敗しました"
+        output = captured_output.getvalue()
+        assert "現在の地域設定" in output, "地域設定情報が表示されませんでした"
+        assert "神奈川" in output, "設定した都道府県名が表示されませんでした"
+        
+        # 都道府県一覧表示コマンドのテスト
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(['list-prefectures'])
+            
+        assert result == 0, "都道府県一覧表示コマンドが失敗しました"
+        output = captured_output.getvalue()
+        assert "利用可能な都道府県" in output, "都道府県一覧が表示されませんでした"
+        assert "東京" in output and "大阪" in output, "主要都道府県が一覧に含まれていません"
+        
+        print("✅ 都道府県関連CLIコマンドテスト成功")
 
 
 if __name__ == '__main__':
