@@ -26,11 +26,16 @@ RecRadiko - Radikoの録音・録画を自動化するアプリケーション
 import sys
 import os
 import warnings
+import atexit
 from pathlib import Path
 
 # プロジェクトルートディレクトリをPythonパスに追加
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
+
+# 環境変数によるwarning抑制
+os.environ['PYTHONWARNINGS'] = 'ignore'
+os.environ['MULTIPROCESSING_TRACK_RESOURCES'] = '0'
 
 try:
     # 必要なモジュールをインポート
@@ -45,12 +50,23 @@ except ImportError as e:
     sys.exit(1)
 
 
+def suppress_all_warnings():
+    """全ての警告を完全に抑制"""
+    warnings.filterwarnings('ignore')
+
 def main():
     """メインエントリーポイント"""
     # 警告を抑制（ユーザー体験向上）
     warnings.filterwarnings('ignore', category=UserWarning)
     warnings.filterwarnings('ignore', category=DeprecationWarning)
     warnings.filterwarnings('ignore', category=PendingDeprecationWarning)
+    
+    # multiprocessing resource_tracker警告を明示的に抑制
+    warnings.filterwarnings('ignore', message='.*resource_tracker.*')
+    warnings.filterwarnings('ignore', message='.*leaked semaphore.*')
+    
+    # 終了時の警告抑制を登録
+    atexit.register(suppress_all_warnings)
     
     try:
         # エラーハンドラーを初期化
