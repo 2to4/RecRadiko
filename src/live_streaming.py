@@ -661,7 +661,12 @@ class LiveRecordingSession:
         # コンポーネント
         self.monitor: Optional[LivePlaylistMonitor] = None
         self.tracker = SegmentTracker()
-        self.downloader = SegmentDownloader()  # 認証ヘッダーは後で設定
+        # セグメントダウンローダー（高速化設定）
+        self.downloader = SegmentDownloader(
+            max_concurrent=8,  # 並行ダウンロード数増加
+            download_timeout=15,  # タイムアウト延長
+            retry_attempts=2  # リトライ回数削減（速度優先）
+        )
         
         # 録音状態
         self.is_recording = False
@@ -836,6 +841,9 @@ class LiveRecordingSession:
                 for segment in update.new_segments:
                     if self.tracker.is_new_segment(segment):
                         await self.downloader.queue_segment(segment)
+                
+                # プリフェッチ: 利用可能なセグメントも積極的にダウンロード
+                await self._prefetch_available_segments()
                         
         except Exception as e:
             self.logger.error(f"プレイリスト監視エラー: {e}")
@@ -919,7 +927,29 @@ class LiveRecordingSession:
                     
                     self.logger.info(f"時間制限調整判定: max_segments_for_duration={max_segments_for_duration}, current_segments={current_segments}")
                     
-                    if current_segments < max_segments_for_duration:
+                    if current_segments > max_segments_for_duration:
+                        # 過剰なセグメントがある場合は制限する（最初の必要分のみ残す）
+                        # セグメント番号順でソートして最初のN個のみ保持
+                        sorted_segments = sorted(written_segments)
+                        segments_to_keep = set(sorted_segments[:max_segments_for_duration])
+                        segments_to_remove = written_segments - segments_to_keep
+                        
+                        # TSファイルを再構築（最初のN個のセグメントのみ）
+                        ts_file.seek(0)  # ファイル先頭に戻る
+                        ts_file.truncate(0)  # ファイルを空にする
+                        
+                        bytes_written = 0
+                        for seq_num in sorted(segments_to_keep):
+                            segment_info = self.tracker.downloaded_segments.get(seq_num)
+                            if segment_info and hasattr(segment_info, 'data') and segment_info.data:
+                                ts_file.write(segment_info.data)
+                                bytes_written += len(segment_info.data)
+                        
+                        written_segments.clear()
+                        written_segments.update(segments_to_keep)
+                        
+                        self.logger.info(f"時間制限による過剰セグメント削除: {len(segments_to_remove)}個削除, 残存: {len(written_segments)}個 ({bytes_written} bytes)")
+                    elif current_segments < max_segments_for_duration:
                         # 不足分のセグメントを書き込み
                         needed_segments = max_segments_for_duration - current_segments
                         self.logger.info(f"不足セグメント書き込み開始: needed_segments={needed_segments}")
@@ -1126,6 +1156,69 @@ class LiveRecordingSession:
             self.logger.debug(f"時間制限チェック: {target_duration}秒, 経過時間: {elapsed:.1f}秒")
         
         return elapsed < target_duration
+    
+    async def _prefetch_available_segments(self):
+        """利用可能なセグメントのプリフェッチ"""
+        try:
+            # 現在のプレイリストを取得
+            if not self.monitor:
+                return
+            
+            current_playlist = await self.monitor.fetch_playlist()
+            if not current_playlist or not current_playlist.segments:
+                return
+            
+            # 録音継続時間を計算
+            elapsed = time.time() - self.start_time
+            target_duration = self.job.duration_seconds
+            if target_duration <= 0:
+                if hasattr(self.job, 'start_time') and hasattr(self.job, 'end_time') and self.job.start_time and self.job.end_time:
+                    target_duration = int((self.job.end_time - self.job.start_time).total_seconds())
+                else:
+                    target_duration = 300
+            
+            remaining_time = max(0, target_duration - elapsed)
+            
+            # 必要な追加セグメント数を計算（余裕を持って多めに）
+            additional_segments_needed = int(remaining_time / 5) + 5  # 5秒/セグメント + 5個バッファ
+            
+            # プレイリストから未ダウンロードのセグメントを抽出
+            prefetch_count = 0
+            media_sequence = getattr(current_playlist, 'media_sequence', 1)
+            
+            for i, playlist_segment in enumerate(current_playlist.segments):
+                if prefetch_count >= additional_segments_needed:
+                    break
+                
+                sequence_number = media_sequence + i
+                
+                # 既にダウンロード済みかチェック
+                if sequence_number in self.tracker.downloaded_segments:
+                    continue
+                
+                # セグメントオブジェクト作成
+                segment_url = playlist_segment.uri
+                if not segment_url.startswith(('http://', 'https://')):
+                    import urllib.parse
+                    segment_url = urllib.parse.urljoin(self.monitor.base_url, segment_url)
+                
+                segment = Segment(
+                    url=segment_url,
+                    sequence_number=sequence_number,
+                    duration=playlist_segment.duration or 5.0,
+                    byte_range=getattr(playlist_segment, 'byterange', None),
+                    key_info=getattr(playlist_segment, 'key', None)
+                )
+                
+                # ダウンロードキューに追加
+                await self.downloader.queue_segment(segment)
+                prefetch_count += 1
+            
+            if prefetch_count > 0:
+                self.logger.debug(f"プリフェッチ: {prefetch_count}セグメントをキューに追加")
+        
+        except Exception as e:
+            self.logger.debug(f"プリフェッチエラー: {e}")
     
     def get_progress(self):
         """録音進捗取得"""
