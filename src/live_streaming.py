@@ -649,6 +649,11 @@ class LiveRecordingSession:
         self.streaming_manager = streaming_manager
         self.start_time = time.time()
         
+        # デバッグ: ジョブ情報をログ出力
+        from .logging_config import get_logger
+        logger = get_logger(__name__)
+        logger.info(f"LiveRecordingSession作成: job.duration_seconds={job.duration_seconds} ({job.duration_seconds//60}分)")
+        
         # コンポーネント
         self.monitor: Optional[LivePlaylistMonitor] = None
         self.tracker = SegmentTracker()
@@ -1018,9 +1023,19 @@ class LiveRecordingSession:
     async def _monitor_recording_duration(self):
         """録音時間監視タスク"""
         target_duration = self.job.duration_seconds
+        self.logger.info(f"録音時間監視開始: job.duration_seconds={self.job.duration_seconds}")
         if target_duration <= 0:
-            target_duration = 300  # フォールバック
-            self.logger.warning(f"ライブ録音時間が無効（{self.job.duration_seconds}秒）、デフォルト5分を使用")
+            # より詳細なエラー情報を表示
+            self.logger.error(f"ライブ録音時間が無効: duration_seconds={self.job.duration_seconds}, start_time={self.job.start_time}, end_time={self.job.end_time}")
+            if hasattr(self.job, 'start_time') and hasattr(self.job, 'end_time') and self.job.start_time and self.job.end_time:
+                calculated_duration = int((self.job.end_time - self.job.start_time).total_seconds())
+                self.logger.info(f"start_time/end_timeから再計算: {calculated_duration}秒")
+                target_duration = calculated_duration if calculated_duration > 0 else 300
+            else:
+                target_duration = 300  # 最後の手段
+            self.logger.warning(f"使用する録音時間: {target_duration}秒 ({target_duration//60}分)")
+        else:
+            self.logger.info(f"録音時間制限設定: {target_duration}秒 ({target_duration//60}分)")
         
         while not self._stop_event.is_set():
             elapsed = time.time() - self.start_time
@@ -1059,7 +1074,16 @@ class LiveRecordingSession:
         elapsed = time.time() - self.start_time
         target_duration = self.job.duration_seconds
         if target_duration <= 0:
-            target_duration = 300  # フォールバック
+            # start_time/end_timeから再計算を試行
+            if hasattr(self.job, 'start_time') and hasattr(self.job, 'end_time') and self.job.start_time and self.job.end_time:
+                calculated_duration = int((self.job.end_time - self.job.start_time).total_seconds())
+                target_duration = calculated_duration if calculated_duration > 0 else 300
+                self.logger.debug(f"時間制限チェック: 再計算された時間 {target_duration}秒を使用")
+            else:
+                target_duration = 300  # フォールバック
+                self.logger.debug(f"時間制限チェック: 無効な値（{self.job.duration_seconds}秒）、300秒使用")
+        else:
+            self.logger.debug(f"時間制限チェック: {target_duration}秒, 経過時間: {elapsed:.1f}秒")
         
         return elapsed < target_duration
     
@@ -1068,7 +1092,16 @@ class LiveRecordingSession:
         elapsed = time.time() - self.start_time
         target_duration = self.job.duration_seconds
         if target_duration <= 0:
-            target_duration = 300  # フォールバック
+            # start_time/end_timeから再計算を試行
+            if hasattr(self.job, 'start_time') and hasattr(self.job, 'end_time') and self.job.start_time and self.job.end_time:
+                calculated_duration = int((self.job.end_time - self.job.start_time).total_seconds())
+                target_duration = calculated_duration if calculated_duration > 0 else 300
+                self.logger.debug(f"進捗計算: 再計算された時間 {target_duration}秒を使用")
+            else:
+                target_duration = 300  # フォールバック
+                self.logger.debug(f"進捗計算: 無効な値（{self.job.duration_seconds}秒）、300秒使用")
+        else:
+            self.logger.debug(f"進捗計算: {target_duration}秒, 経過時間: {elapsed:.1f}秒")
         
         progress_percent = min(100.0, (elapsed / target_duration) * 100)
         

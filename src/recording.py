@@ -63,8 +63,21 @@ class RecordingJob:
     priority: int = 0
     
     def __post_init__(self):
+        from .logging_config import get_logger
+        logger = get_logger(__name__)
+        
+        original_duration = self.duration_seconds
         if not self.duration_seconds:
             self.duration_seconds = int((self.end_time - self.start_time).total_seconds())
+            logger.info(f"RecordingJob.__post_init__: duration_seconds未設定のため計算 {self.duration_seconds}秒")
+        else:
+            logger.info(f"RecordingJob.__post_init__: 設定済みduration_seconds={self.duration_seconds}秒を使用")
+        
+        # 一貫性チェック
+        if self.start_time and self.end_time:
+            calculated_duration = int((self.end_time - self.start_time).total_seconds())
+            if abs(self.duration_seconds - calculated_duration) > 1:  # 1秒の誤差は許容
+                logger.warning(f"RecordingJob.__post_init__: 時間不整合 duration_seconds={self.duration_seconds}, calculated={calculated_duration}")
     
     @property
     def duration_minutes(self) -> int:
@@ -267,6 +280,7 @@ class RecordingManager:
         
         # 録音時間を計算
         duration_seconds = int((end_time - start_time).total_seconds())
+        self.logger.info(f"録音ジョブ作成: duration_seconds={duration_seconds} ({duration_seconds//60}分)")
         
         # ジョブを作成
         job = RecordingJob(
