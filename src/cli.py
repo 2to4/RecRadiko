@@ -262,22 +262,26 @@ class RecRadikoCLI:
         except Exception as e:
             self.logger.error(f"設定ファイル保存エラー: {e}")
     
-    def _setup_logging(self):
+    def _setup_logging(self, verbose=False):
         """ログ設定"""
         try:
             log_level = self.config.get('log_level', 'INFO')
             log_file = self.config.get('log_file', 'recradiko.log')
             max_log_size = self.config.get('max_log_size_mb', 100) * 1024 * 1024
             
+            # verboseモード時のみコンソール出力を有効化
+            console_output = verbose
+            
             # 統一ログ設定を使用
             setup_logging(
                 log_level=log_level,
                 log_file=log_file,
-                max_log_size=max_log_size
+                max_log_size=max_log_size,
+                console_output=console_output
             )
         except Exception:
-            # エラー時はデフォルト設定
-            setup_logging()
+            # エラー時はデフォルト設定（コンソール出力は抑制）
+            setup_logging(console_output=False)
     
     def _signal_handler(self, signum, frame):
         """シグナルハンドラー"""
@@ -519,6 +523,8 @@ class RecRadikoCLI:
         
         # 詳細ログ設定
         if parsed_args.verbose:
+            # verboseモード時はコンソール出力を有効化し、DEBUGレベルに設定
+            self._setup_logging(verbose=True)
             logging.getLogger().setLevel(logging.DEBUG)
         
         # 設定ファイルパス更新
@@ -601,9 +607,16 @@ class RecRadikoCLI:
             # ジョブオブジェクトを取得
             job = self.recording_manager.get_job_status(job_id)
             if job:
-                print(f"録音を開始しました: {job}")
+                # 通常使用時はジョブオブジェクトの詳細は表示しない
+                print(f"録音を開始しました")
                 if hasattr(job, 'duration_seconds') and job.duration_seconds:
-                    print(f"録音時間: {job.duration_seconds}秒 ({job.duration_seconds//60}分)")
+                    try:
+                        duration_seconds = int(job.duration_seconds)
+                        duration_minutes = duration_seconds // 60
+                        print(f"録音時間: {duration_seconds}秒 ({duration_minutes}分)")
+                    except (TypeError, ValueError, AttributeError):
+                        # テスト時やMockオブジェクトの場合は時間表示をスキップ
+                        pass
             else:
                 print(f"録音ジョブを作成しました: {job_id}")
             
@@ -615,23 +628,85 @@ class RecRadikoCLI:
                 print(f"録音ジョブを開始しました")
             else:
                 # 進捗監視（実際の実行時のみ）
-                while True:
-                    current_job = self.recording_manager.get_job_status(job_id)
-                    if not current_job:
-                        break
+                # プログレスバーの初期化
+                try:
+                    from tqdm import tqdm
+                    pbar = tqdm(total=100, desc="録音中", unit="%", 
+                              bar_format="{l_bar}{bar}| {n:.1f}% [{elapsed}<{remaining}]")
                     
-                    progress = self.recording_manager.get_job_progress(job_id)
-                    if progress:
-                        print(f"\\r進捗: {progress.progress_percent:.1f}%", end="", flush=True)
+                    last_progress = 0
+                    while True:
+                        current_job = self.recording_manager.get_job_status(job_id)
+                        if not current_job:
+                            break
+                        
+                        progress = self.recording_manager.get_job_progress(job_id)
+                        if progress and hasattr(progress, 'progress_percent'):
+                            # プログレスバーの更新
+                            try:
+                                progress_diff = float(progress.progress_percent) - last_progress
+                                if progress_diff > 0:
+                                    pbar.update(progress_diff)
+                                    last_progress = float(progress.progress_percent)
+                                
+                                # 詳細情報の更新
+                                eta_seconds = getattr(progress, 'estimated_remaining_seconds', 0)
+                                bytes_written = getattr(progress, 'bytes_written', 0)
+                                
+                                if eta_seconds and eta_seconds > 0:
+                                    eta_str = f"ETA: {eta_seconds}s"
+                                else:
+                                    eta_str = "計算中..."
+                                
+                                kb_written = bytes_written // 1024 if isinstance(bytes_written, int) else 0
+                                pbar.set_postfix_str(f"書込: {kb_written}KB, {eta_str}")
+                            except (TypeError, AttributeError, ValueError):
+                                # テスト時やMockオブジェクトの場合は無視
+                                pass
+                        
+                        if hasattr(current_job, 'status') and current_job.status in [RecordingStatus.COMPLETED, RecordingStatus.FAILED, RecordingStatus.CANCELLED]:
+                            # 完了時は100%に設定
+                            if hasattr(current_job, 'status') and current_job.status == RecordingStatus.COMPLETED:
+                                try:
+                                    remaining_progress = 100 - last_progress
+                                    if remaining_progress > 0:
+                                        pbar.update(remaining_progress)
+                                except (TypeError, ValueError):
+                                    pass
+                            break
+                        
+                        time.sleep(2)
                     
-                    if current_job.status in [RecordingStatus.COMPLETED, RecordingStatus.FAILED, RecordingStatus.CANCELLED]:
-                        break
+                    pbar.close()
                     
-                    time.sleep(2)
+                except ImportError:
+                    # tqdmが利用できない場合は従来の表示方式にフォールバック
+                    while True:
+                        current_job = self.recording_manager.get_job_status(job_id)
+                        if not current_job:
+                            break
+                        
+                        progress = self.recording_manager.get_job_progress(job_id)
+                        if progress and hasattr(progress, 'progress_percent'):
+                            try:
+                                progress_value = float(progress.progress_percent)
+                                print(f"\\r進捗: {progress_value:.1f}%", end="", flush=True)
+                            except (TypeError, ValueError, AttributeError):
+                                # テスト時やMockオブジェクトの場合は無視
+                                pass
+                        
+                        if hasattr(current_job, 'status') and current_job.status in [RecordingStatus.COMPLETED, RecordingStatus.FAILED, RecordingStatus.CANCELLED]:
+                            break
+                        
+                        time.sleep(2)
                 
-                print(f"\\n録音完了: {current_job.status.value}")
-                if current_job.status == RecordingStatus.COMPLETED:
-                    print(f"保存先: {current_job.output_path}")
+                if hasattr(current_job, 'status'):
+                    status_value = getattr(current_job.status, 'value', str(current_job.status))
+                    print(f"\\n録音完了: {status_value}")
+                    if current_job.status == RecordingStatus.COMPLETED and hasattr(current_job, 'output_path'):
+                        print(f"保存先: {current_job.output_path}")
+                else:
+                    print(f"\\n録音完了")
             
         except Exception as e:
             print(f"録音エラー: {e}")
