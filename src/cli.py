@@ -15,9 +15,17 @@ import logging
 import signal
 import threading
 import time
+import atexit
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# タブ補完機能のためのreadlineライブラリ
+try:
+    import readline
+    READLINE_AVAILABLE = True
+except ImportError:
+    READLINE_AVAILABLE = False
 import os
 
 from .auth import RadikoAuthenticator, AuthenticationError
@@ -35,6 +43,21 @@ class RecRadikoCLI:
     """RecRadiko CLIメインクラス"""
     
     VERSION = "1.0.0"
+    
+    # 対話型モードで利用可能なコマンド一覧
+    INTERACTIVE_COMMANDS = [
+        'record', 'schedule', 'list-stations', 'list-programs', 
+        'list-schedules', 'list-recordings', 'show-region', 
+        'list-prefectures', 'status', 'stats', 'help', 'exit', 'quit'
+    ]
+    
+    # コマンドのオプション一覧
+    COMMAND_OPTIONS = {
+        'record': ['--format', '--bitrate'],
+        'list-programs': ['--station', '--date'],
+        'list-recordings': ['--date', '--station', '--search'],
+        'schedule': []  # 位置引数のみ
+    }
     
     def __init__(self, 
                  config_path: str = "config.json",
@@ -55,6 +78,9 @@ class RecRadikoCLI:
         
         # 基本ログ設定（設定ロード前に必要）
         self.logger = get_logger(__name__)
+        
+        # タブ補完機能の初期化
+        self._setup_readline()
         
         self.config = self._load_config()
         
@@ -282,6 +308,113 @@ class RecRadikoCLI:
         except Exception:
             # エラー時はデフォルト設定（コンソール出力は抑制）
             setup_logging(console_output=False)
+    
+    def _setup_readline(self):
+        """readlineの設定とタブ補完の初期化"""
+        if not READLINE_AVAILABLE:
+            return
+        
+        try:
+            # 補完機能の設定
+            readline.set_completer(self._completer)
+            readline.parse_and_bind("tab: complete")
+            
+            # 履歴ファイルの設定
+            history_file = Path.home() / ".recradiko_history"
+            try:
+                readline.read_history_file(str(history_file))
+                # 履歴の最大数を設定
+                readline.set_history_length(1000)
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                self.logger.debug(f"履歴ファイル読み込みエラー: {e}")
+            
+            # 終了時の履歴保存を設定
+            atexit.register(self._save_history, str(history_file))
+            
+        except Exception as e:
+            self.logger.debug(f"readline設定エラー: {e}")
+    
+    def _save_history(self, history_file: str):
+        """履歴ファイルを保存"""
+        if READLINE_AVAILABLE:
+            try:
+                readline.write_history_file(history_file)
+            except Exception as e:
+                self.logger.debug(f"履歴ファイル保存エラー: {e}")
+    
+    def _completer(self, text: str, state: int) -> Optional[str]:
+        """タブ補完の実装"""
+        if not READLINE_AVAILABLE:
+            return None
+        
+        try:
+            line = readline.get_line_buffer()
+            line_parts = line.split()
+            
+            # 現在の入力行を解析
+            if not line_parts or (len(line_parts) == 1 and not line.endswith(' ')):
+                # コマンドレベルの補完
+                matches = [cmd for cmd in self.INTERACTIVE_COMMANDS 
+                          if cmd.startswith(text)]
+            else:
+                # 引数・オプションレベルの補完
+                matches = self._get_argument_completions(line, text)
+            
+            try:
+                return matches[state]
+            except IndexError:
+                return None
+                
+        except Exception as e:
+            self.logger.debug(f"補完エラー: {e}")
+            return None
+    
+    def _get_argument_completions(self, line: str, text: str) -> List[str]:
+        """引数・オプションレベルのタブ補完"""
+        line_parts = line.split()
+        command = line_parts[0] if line_parts else ""
+        
+        matches = []
+        
+        # コマンド別の補完
+        if command == "record":
+            if text.startswith('--'):
+                # オプション補完
+                options = ['--format', '--bitrate']
+                matches = [opt for opt in options if opt.startswith(text)]
+            elif len(line_parts) == 1 or (len(line_parts) == 2 and not line.endswith(' ')):
+                # 放送局ID補完
+                try:
+                    stations = self._get_available_stations()
+                    matches = [station for station in stations if station.startswith(text)]
+                except Exception:
+                    matches = []
+                    
+        elif command == "list-programs":
+            if text.startswith('--'):
+                options = ['--station', '--date']
+                matches = [opt for opt in options if opt.startswith(text)]
+                
+        elif command == "list-recordings":
+            if text.startswith('--'):
+                options = ['--date', '--station', '--search']
+                matches = [opt for opt in options if opt.startswith(text)]
+        
+        return matches
+    
+    def _get_available_stations(self) -> List[str]:
+        """利用可能な放送局IDの一覧を取得"""
+        try:
+            if hasattr(self, 'program_info_manager') and self.program_info_manager:
+                stations = self.program_info_manager.get_stations()
+                return [station.id for station in stations]
+        except Exception:
+            pass
+        
+        # フォールバック: 一般的な放送局ID
+        return ['TBS', 'QRR', 'LFR', 'RN1', 'RN2', 'INT', 'FMT', 'FMJ', 'JORF']
     
     def _signal_handler(self, signum, frame):
         """シグナルハンドラー"""
@@ -1149,6 +1282,8 @@ class RecRadikoCLI:
         print("RecRadiko 対話型モード")
         print("利用可能なコマンド: record, schedule, list-stations, list-programs, list-schedules, status, stats, help, exit")
         print("例: record TBS 60")
+        if READLINE_AVAILABLE:
+            print("💡 タブキーでコマンド補完、↑↓キーで履歴操作が利用できます")
         print("終了するには 'exit' または Ctrl+C を入力してください")
         print("-" * 60)
         
