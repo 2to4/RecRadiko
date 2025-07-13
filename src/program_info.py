@@ -79,6 +79,101 @@ class Program:
         return cls(**data)
 
 
+@dataclass
+class ProgramInfo:
+    """番組情報データクラス（タイムフリー対応）"""
+    
+    # 基本情報
+    program_id: str
+    station_id: str
+    station_name: str
+    title: str
+    start_time: datetime
+    end_time: datetime
+    
+    # 詳細情報
+    description: str = ""
+    performers: List[str] = None
+    genre: str = ""
+    
+    # タイムフリー関連
+    is_timefree_available: bool = False
+    timefree_end_time: Optional[datetime] = None
+    
+    def __post_init__(self):
+        if self.performers is None:
+            self.performers = []
+    
+    @property
+    def duration_minutes(self) -> int:
+        """番組時間（分）"""
+        return int((self.end_time - self.start_time).total_seconds() / 60)
+    
+    @property
+    def duration_seconds(self) -> int:
+        """番組時間（秒）"""
+        return int((self.end_time - self.start_time).total_seconds())
+    
+    def to_filename(self, format: str = "mp3") -> str:
+        """録音ファイル名生成
+        
+        Args:
+            format: ファイル形式
+            
+        Returns:
+            str: ファイル名
+            
+        Format:
+            {STATION_ID}_{YYYYMMDD}_{safe_title}.{format}
+        """
+        import re
+        date_str = self.start_time.strftime('%Y%m%d')
+        safe_title = re.sub(r'[^\w\-_\.]', '_', self.title)
+        safe_title = re.sub(r'_+', '_', safe_title).strip('_')
+        return f"{self.station_id}_{date_str}_{safe_title}.{format}"
+    
+    def to_metadata(self) -> Dict[str, str]:
+        """ID3タグメタデータ生成
+        
+        Returns:
+            Dict[str, str]: メタデータ辞書
+        """
+        return {
+            'title': self.title,
+            'artist': ', '.join(self.performers) if self.performers else self.station_name,
+            'album': self.station_name,
+            'date': self.start_time.strftime('%Y-%m-%d'),
+            'genre': 'Radio',
+            'comment': self.description
+        }
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """辞書形式への変換（キャッシュ用）"""
+        return {
+            'program_id': self.program_id,
+            'station_id': self.station_id,
+            'station_name': self.station_name,
+            'title': self.title,
+            'start_time': self.start_time.isoformat(),
+            'end_time': self.end_time.isoformat(),
+            'description': self.description,
+            'performers': self.performers,
+            'genre': self.genre,
+            'is_timefree_available': self.is_timefree_available,
+            'timefree_end_time': self.timefree_end_time.isoformat() if self.timefree_end_time else None
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ProgramInfo':
+        """辞書からの復元（キャッシュ用）"""
+        data = data.copy()
+        data['start_time'] = datetime.fromisoformat(data['start_time'])
+        data['end_time'] = datetime.fromisoformat(data['end_time'])
+        if data.get('timefree_end_time'):
+            data['timefree_end_time'] = datetime.fromisoformat(data['timefree_end_time'])
+        return cls(**data)
+
+
 class ProgramInfoManager:
     """番組情報管理クラス"""
     

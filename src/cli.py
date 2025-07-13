@@ -38,6 +38,8 @@ from .scheduler import RecordingScheduler, RepeatPattern, ScheduleStatus, Schedu
 from .error_handler import ErrorHandler, handle_error
 from .logging_config import setup_logging, get_logger
 from .region_mapper import RegionMapper
+from .timefree_recorder import TimeFreeRecorder
+from .program_history import ProgramHistoryManager
 
 
 class RecRadikoCLI:
@@ -45,19 +47,26 @@ class RecRadikoCLI:
     
     VERSION = "1.0.0"
     
-    # 対話型モードで利用可能なコマンド一覧
+    # 対話型モードで利用可能なコマンド一覧（タイムフリー専用）
     INTERACTIVE_COMMANDS = [
-        'record', 'schedule', 'list-stations', 'list-programs', 
-        'list-schedules', 'list-recordings', 'show-region', 
-        'list-prefectures', 'status', 'stats', 'help', 'exit', 'quit'
+        'list-programs', 'record', 'record-id', 'search-programs',
+        'list-stations', 'show-region', 'list-prefectures', 
+        'status', 'help', 'exit', 'quit'
     ]
     
-    # コマンドのオプション一覧
+    # コマンドのオプション一覧（タイムフリー専用）
     COMMAND_OPTIONS = {
-        'record': ['--format', '--bitrate'],
-        'list-programs': ['--station', '--date'],
-        'list-recordings': ['--date', '--station', '--search'],
-        'schedule': []  # 位置引数のみ
+        'list-programs': ['--date', '--station'],
+        'record': ['--date', '--station', '--title', '--format', '--output'],
+        'record-id': ['--program-id', '--format', '--output'],
+        'search-programs': ['--keyword', '--date-range', '--station'],
+        'list-stations': [],
+        'show-region': [],
+        'list-prefectures': [],
+        'status': [],
+        'help': [],
+        'exit': [],
+        'quit': []
     }
     
     def __init__(self, 
@@ -99,6 +108,10 @@ class RecRadikoCLI:
         self.file_manager = file_manager
         self.scheduler = scheduler
         self.error_handler = error_handler
+        
+        # タイムフリー専用コンポーネント
+        self.timefree_recorder = None
+        self.program_history_manager = None
         
         # 後方互換性のため
         self.authenticator = self.auth_manager
@@ -497,6 +510,13 @@ class RecRadikoCLI:
             if self.recording_manager is None:
                 # 録音管理は実際に録音時に初期化
                 pass
+            
+            # タイムフリー専用コンポーネント初期化
+            if self.timefree_recorder is None:
+                self.timefree_recorder = TimeFreeRecorder(self.authenticator)
+            
+            if self.program_history_manager is None:
+                self.program_history_manager = ProgramHistoryManager(self.authenticator)
             
             # スケジューラー（依存性注入されていない場合のみ）
             # 対話型モードでは通常不要なので、遅延初期化とする
@@ -1377,27 +1397,28 @@ class RecRadikoCLI:
         return 0
     
     def _print_interactive_help(self):
-        """対話型モードのヘルプを表示"""
+        """対話型モードのヘルプを表示（タイムフリー専用）"""
         print("""
-利用可能なコマンド:
-  record <放送局ID> <時間(分)>          - 即座に録音を開始
-  schedule <放送局ID> "<番組名>" <開始時刻> <終了時刻>  - 録音を予約
-  list-stations                        - 放送局一覧を表示
-  list-programs [--station <ID>]       - 番組表を表示
-  list-schedules                       - 録音予約一覧を表示
-  list-recordings                      - 録音ファイル一覧を表示
-  show-region                          - 現在の地域設定を表示
-  list-prefectures                     - 全都道府県一覧を表示
-  status                               - システム状態を表示
-  stats                                - 統計情報を表示
-  help                                 - このヘルプを表示
-  exit                                 - プログラムを終了
+RecRadiko タイムフリー専用版 - 利用可能なコマンド:
+
+  list-programs <日付> [--station <ID>]                - 過去番組表を表示
+  record <日付> <放送局ID> "<番組名>"                    - 番組名指定で録音
+  record-id <番組ID>                                   - 番組ID指定で録音
+  search-programs <キーワード> [--station <ID>]        - 番組検索
+  list-stations                                        - 放送局一覧を表示
+  show-region                                          - 現在の地域設定を表示
+  list-prefectures                                     - 全都道府県一覧を表示
+  status                                               - システム状態を表示
+  help                                                 - このヘルプを表示
+  exit                                                 - プログラムを終了
 
 例:
-  record TBS 60                        - TBSラジオを60分録音
-  list-stations                        - 利用可能な放送局を表示
-  list-programs --station TBS          - TBSの番組表を表示
-  schedule TBS "ニュース" 2024-01-01T19:00 2024-01-01T20:00  - 予約録音
+  list-programs 2025-07-10 --station TBS              - 7月10日のTBS番組表
+  record 2025-07-10 TBS "森本毅郎・スタンバイ!"       - 番組名で録音
+  record-id TBS_20250710_060000                        - 番組IDで録音
+  search-programs "森本毅郎" --station TBS             - TBSで森本毅郎検索
+
+注意: 本バージョンはタイムフリー専用です（過去7日間の番組のみ対応）
         """)
     
     def _execute_interactive_command(self, command_args):
@@ -1425,61 +1446,102 @@ class RecRadikoCLI:
                 return 0
             
             if command == 'record':
-                if len(command_args) < 3:
-                    print("使用法: record <放送局ID> <時間(分)> [--format <形式>] [--bitrate <ビットレート>]")
+                if len(command_args) < 4:
+                    print("使用法: record <日付> <放送局ID> \"<番組名>\" [--format <形式>] [--output <ファイル名>]")
+                    print("例: record 2025-07-10 TBS \"森本毅郎・スタンバイ!\"")
                     return 1
                 
-                args.station_id = command_args[1]
-                args.duration = int(command_args[2])
+                args.date = command_args[1]
+                args.station_id = command_args[2]
+                args.title = command_args[3]
                 args.format = 'mp3'  # デフォルト
-                args.bitrate = 128   # デフォルト
                 args.output = None
                 
                 # オプション解析
-                i = 3
+                i = 4
                 while i < len(command_args):
                     if command_args[i] == '--format' and i + 1 < len(command_args):
                         args.format = command_args[i + 1]
                         i += 2
-                    elif command_args[i] == '--bitrate' and i + 1 < len(command_args):
-                        args.bitrate = int(command_args[i + 1])
+                    elif command_args[i] == '--output' and i + 1 < len(command_args):
+                        args.output = command_args[i + 1]
                         i += 2
                     else:
                         i += 1
                 
-                return self._cmd_record(args)
+                return self._cmd_timefree_record(args)
+            
+            elif command == 'record-id':
+                if len(command_args) < 2:
+                    print("使用法: record-id <番組ID> [--format <形式>] [--output <ファイル名>]")
+                    print("例: record-id TBS_20250710_060000")
+                    return 1
+                
+                args.program_id = command_args[1]
+                args.format = 'mp3'  # デフォルト
+                args.output = None
+                
+                # オプション解析
+                i = 2
+                while i < len(command_args):
+                    if command_args[i] == '--format' and i + 1 < len(command_args):
+                        args.format = command_args[i + 1]
+                        i += 2
+                    elif command_args[i] == '--output' and i + 1 < len(command_args):
+                        args.output = command_args[i + 1]
+                        i += 2
+                    else:
+                        i += 1
+                
+                return self._cmd_timefree_record_by_id(args)
+            
+            elif command == 'search-programs':
+                if len(command_args) < 2:
+                    print("使用法: search-programs <キーワード> [--date-range <開始日> <終了日>] [--station <放送局ID>]")
+                    print("例: search-programs \"森本毅郎\" --station TBS")
+                    return 1
+                
+                args.keyword = command_args[1]
+                args.date_range = None
+                args.station_ids = None
+                
+                # オプション解析
+                i = 2
+                while i < len(command_args):
+                    if command_args[i] == '--date-range' and i + 2 < len(command_args):
+                        args.date_range = (command_args[i + 1], command_args[i + 2])
+                        i += 3
+                    elif command_args[i] == '--station' and i + 1 < len(command_args):
+                        args.station_ids = [command_args[i + 1]]
+                        i += 2
+                    else:
+                        i += 1
+                
+                return self._cmd_search_programs(args)
             
             elif command == 'list-stations':
                 return self._cmd_list_stations(args)
             
             elif command == 'list-programs':
-                args.date = None
+                if len(command_args) < 2:
+                    print("使用法: list-programs <日付> [--station <放送局ID>]")
+                    print("例: list-programs 2025-07-10 --station TBS")
+                    return 1
+                
+                args.date = command_args[1]
                 args.station_id = None
                 
                 # オプション解析
-                i = 1
+                i = 2
                 while i < len(command_args):
                     if command_args[i] == '--station' and i + 1 < len(command_args):
                         args.station_id = command_args[i + 1]
                         i += 2
-                    elif command_args[i] == '--date' and i + 1 < len(command_args):
-                        args.date = command_args[i + 1]
-                        i += 2
                     else:
                         i += 1
                 
-                return self._cmd_list_programs(args)
+                return self._cmd_timefree_list_programs(args)
             
-            elif command == 'list-schedules':
-                args.status = None
-                args.station = None
-                return self._cmd_list_schedules(args)
-            
-            elif command == 'list-recordings':
-                args.date = None
-                args.station = None
-                args.search = None
-                return self._cmd_list_recordings(args)
             
             elif command == 'show-region':
                 return self._cmd_show_region(args)
@@ -1489,26 +1551,6 @@ class RecRadikoCLI:
             
             elif command == 'status':
                 return self._cmd_status(args)
-            
-            elif command == 'stats':
-                return self._cmd_stats(args)
-            
-            elif command == 'schedule':
-                if len(command_args) < 5:
-                    print("使用法: schedule <放送局ID> \"<番組名>\" <開始時刻> <終了時刻>")
-                    return 1
-                
-                args.station_id = command_args[1]
-                args.program_title = command_args[2]
-                args.start_time = command_args[3]
-                args.end_time = command_args[4]
-                args.repeat = None
-                args.repeat_end = None
-                args.format = 'mp3'
-                args.bitrate = 128
-                args.notes = None
-                
-                return self._cmd_schedule(args)
             
             else:
                 print(f"不明なコマンド: {command}")
