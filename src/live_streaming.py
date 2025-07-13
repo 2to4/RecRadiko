@@ -271,6 +271,11 @@ class LivePlaylistMonitor:
         if self.last_sequence == 0:
             # 初回監視：最新の1セグメントのみを対象（過度なダウンロードを避ける）
             if playlist.segments:
+                # すべてのセグメントURLを既知として登録（重複ダウンロードを防ぐ）
+                for segment in playlist.segments:
+                    self.seen_segment_urls.add(segment.uri)
+                
+                # 最新の1セグメントのみを新規として取得
                 last_segment = playlist.segments[-1]
                 sequence_number = media_sequence + len(playlist.segments) - 1
                 
@@ -289,9 +294,8 @@ class LivePlaylistMonitor:
                 
                 new_segments.append(new_segment)
                 self.last_sequence = sequence_number
-                self.seen_segment_urls.add(last_segment.uri)
                 
-                self.logger.info(f"初回監視: 最新セグメント取得 seq={sequence_number}")
+                self.logger.info(f"初回監視: 最新セグメント取得 seq={sequence_number}, 既知URL登録={len(playlist.segments)}個")
         
         else:
             # 継続監視：URL差分ベースの新規セグメント検出
@@ -889,29 +893,60 @@ class LiveRecordingSession:
                     written_count = self._write_available_segments(ts_file, written_segments, last_written_seq)
                     if written_count > 0:
                         last_written_seq = max(written_segments) if written_segments else last_written_seq
-                        self.logger.debug(f"アクティブフェーズ: {written_count}セグメント書き込み")
+                        self.logger.debug(f"アクティブフェーズ: {written_count}セグメント書き込み (合計: {len(written_segments)})")
                     
                     await asyncio.sleep(0.1)  # 高頻度チェック
                 
                 self.logger.info("停止イベント検出 - 残りセグメント処理開始")
                 
-                # フェーズ2: 残りセグメント書き込み（停止後の猶予期間）
-                grace_period = 5.0  # 5秒の猶予期間
-                grace_start = time.time()
+                # フェーズ2: 時間制限チェック後の限定的な猶予期間
+                # 録音時間制限到達が理由の場合は追加書き込みを制限
+                elapsed = time.time() - self.start_time
+                target_duration = self.job.duration_seconds
+                if target_duration <= 0:
+                    if hasattr(self.job, 'start_time') and hasattr(self.job, 'end_time') and self.job.start_time and self.job.end_time:
+                        target_duration = int((self.job.end_time - self.job.start_time).total_seconds())
+                    else:
+                        target_duration = 300
                 
-                while time.time() - grace_start < grace_period:
-                    written_count = self._write_available_segments(ts_file, written_segments, last_written_seq)
-                    if written_count > 0:
-                        last_written_seq = max(written_segments) if written_segments else last_written_seq
-                        self.logger.debug(f"グレースフェーズ: {written_count}セグメント書き込み")
-                        grace_start = time.time()  # 新規セグメントがあれば猶予期間リセット
+                self.logger.info(f"停止後処理: elapsed={elapsed:.1f}秒, target_duration={target_duration}秒, written_segments={len(written_segments)}")
+                
+                # 時間制限到達による停止の場合は適切な数のセグメントのみ書き込み
+                if elapsed >= target_duration:
+                    # 必要なセグメント数を計算（各セグメント約5秒と仮定）
+                    max_segments_for_duration = int(target_duration / 5) + 1  # 少し余裕を持たせる
+                    current_segments = len(written_segments)
                     
-                    await asyncio.sleep(0.1)
-                
-                # フェーズ3: 最終フラッシュ
-                final_count = self._write_available_segments(ts_file, written_segments, last_written_seq)
-                if final_count > 0:
-                    self.logger.info(f"最終フラッシュ: {final_count}セグメント書き込み")
+                    self.logger.info(f"時間制限調整判定: max_segments_for_duration={max_segments_for_duration}, current_segments={current_segments}")
+                    
+                    if current_segments < max_segments_for_duration:
+                        # 不足分のセグメントを書き込み
+                        needed_segments = max_segments_for_duration - current_segments
+                        self.logger.info(f"不足セグメント書き込み開始: needed_segments={needed_segments}")
+                        final_count = self._write_available_segments(ts_file, written_segments, last_written_seq, needed_segments)
+                        if final_count > 0:
+                            self.logger.info(f"時間制限調整: {final_count}セグメント追加書き込み (合計: {len(written_segments)})")
+                        else:
+                            self.logger.info(f"時間制限調整: 利用可能な追加セグメントなし")
+                    else:
+                        self.logger.info(f"時間制限到達による停止のため、追加セグメント書き込みをスキップ (既存: {current_segments})")
+                else:
+                    # 通常の停止（エラー等）の場合は猶予期間を設ける
+                    grace_period = 2.0  # 2秒の短縮された猶予期間
+                    grace_start = time.time()
+                    
+                    while time.time() - grace_start < grace_period:
+                        written_count = self._write_available_segments(ts_file, written_segments, last_written_seq)
+                        if written_count > 0:
+                            last_written_seq = max(written_segments) if written_segments else last_written_seq
+                            self.logger.debug(f"グレースフェーズ: {written_count}セグメント書き込み")
+                        
+                        await asyncio.sleep(0.1)
+                    
+                    # フェーズ3: 最終フラッシュ（通常停止の場合のみ）
+                    final_count = self._write_available_segments(ts_file, written_segments, last_written_seq)
+                    if final_count > 0:
+                        self.logger.info(f"最終フラッシュ: {final_count}セグメント書き込み")
                 
                 # ファイル同期
                 ts_file.flush()
@@ -938,7 +973,7 @@ class LiveRecordingSession:
             if os.path.exists(temp_ts_file):
                 self.logger.info(f"エラー時一時ファイル保持: {temp_ts_file}")
     
-    def _write_available_segments(self, ts_file, written_segments: set, last_written_seq: int) -> int:
+    def _write_available_segments(self, ts_file, written_segments: set, last_written_seq: int, max_additional: int = None) -> int:
         """利用可能なセグメントを順序通りに書き込み"""
         written_count = 0
         
@@ -948,6 +983,11 @@ class LiveRecordingSession:
         for seq_num in available_segments:
             if seq_num in written_segments:
                 continue
+            
+            # 最大追加数チェック
+            if max_additional is not None and written_count >= max_additional:
+                self.logger.debug(f"追加セグメント数制限到達: {written_count}/{max_additional}")
+                break
                 
             segment_info = self.tracker.downloaded_segments[seq_num]
             segment_data = getattr(segment_info, 'data', None)
