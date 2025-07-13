@@ -16,6 +16,7 @@ import signal
 import threading
 import time
 import atexit
+import warnings
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -78,6 +79,9 @@ class RecRadikoCLI:
         
         # 基本ログ設定（設定ロード前に必要）
         self.logger = get_logger(__name__)
+        
+        # 警告フィルター設定（UserWarning抑制）
+        self._setup_warning_filters()
         
         # タブ補完機能の初期化
         self._setup_readline()
@@ -308,6 +312,29 @@ class RecRadikoCLI:
         except Exception:
             # エラー時はデフォルト設定（コンソール出力は抑制）
             setup_logging(console_output=False)
+    
+    def _setup_warning_filters(self):
+        """警告フィルターの設定"""
+        try:
+            # UserWarningを抑制（urllib3、readline等からの警告）
+            warnings.filterwarnings('ignore', category=UserWarning)
+            
+            # 特定のライブラリからの警告を抑制
+            warnings.filterwarnings('ignore', category=UserWarning, module='urllib3.*')
+            warnings.filterwarnings('ignore', category=UserWarning, module='readline.*')
+            warnings.filterwarnings('ignore', category=UserWarning, module='requests.*')
+            
+            # 非推奨警告も抑制
+            warnings.filterwarnings('ignore', category=DeprecationWarning)
+            warnings.filterwarnings('ignore', category=PendingDeprecationWarning)
+            
+            # SSL関連の警告を抑制
+            warnings.filterwarnings('ignore', message='.*SSL.*')
+            warnings.filterwarnings('ignore', message='.*certificate.*')
+            
+        except Exception as e:
+            # 警告フィルター設定エラーは無視（重要度低）
+            pass
     
     def _setup_readline(self):
         """readlineの設定とタブ補完の初期化"""
@@ -672,18 +699,26 @@ class RecRadikoCLI:
         
         # デフォルトで対話型モードを開始
         try:
-            return self._run_interactive()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return self._run_interactive()
                 
         except KeyboardInterrupt:
             print("\\n操作がキャンセルされました")
-            return 1
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return 1
         except Exception as e:
             print(f"エラーが発生しました: {e}")
             if self.error_handler:
                 handle_error(e)
-            return 1
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return 1
         finally:
-            self._cleanup()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self._cleanup()
     
     def _run_daemon(self):
         """デーモンモードで実行"""
@@ -1302,7 +1337,10 @@ class RecRadikoCLI:
                 # 終了コマンド
                 if user_input.lower() in ['exit', 'quit', 'q']:
                     print("RecRadikoを終了します")
-                    return 0
+                    # 終了時の警告を抑制
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        return 0
                 
                 # ヘルプコマンド
                 if user_input.lower() in ['help', 'h', '?']:
@@ -1324,10 +1362,16 @@ class RecRadikoCLI:
                     
             except KeyboardInterrupt:
                 print("\nRecRadikoを終了します")
-                return 0
+                # 終了時の警告を抑制
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    return 0
             except EOFError:
                 print("\nRecRadikoを終了します")
-                return 0
+                # 終了時の警告を抑制
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    return 0
         
         # 通常ここには到達しないが、念のため
         return 0
@@ -1370,6 +1414,16 @@ class RecRadikoCLI:
         args = SimpleArgs()
         
         try:
+            # 終了コマンド
+            if command in ['exit', 'quit', 'q']:
+                print("RecRadikoを終了します")
+                return 0
+            
+            # ヘルプコマンド
+            if command in ['help', 'h', '?']:
+                self._print_interactive_help()
+                return 0
+            
             if command == 'record':
                 if len(command_args) < 3:
                     print("使用法: record <放送局ID> <時間(分)> [--format <形式>] [--bitrate <ビットレート>]")

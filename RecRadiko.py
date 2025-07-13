@@ -25,6 +25,7 @@ RecRadiko - Radikoの録音・録画を自動化するアプリケーション
 
 import sys
 import os
+import warnings
 from pathlib import Path
 
 # プロジェクトルートディレクトリをPythonパスに追加
@@ -46,6 +47,11 @@ except ImportError as e:
 
 def main():
     """メインエントリーポイント"""
+    # 警告を抑制（ユーザー体験向上）
+    warnings.filterwarnings('ignore', category=UserWarning)
+    warnings.filterwarnings('ignore', category=DeprecationWarning)
+    warnings.filterwarnings('ignore', category=PendingDeprecationWarning)
+    
     try:
         # エラーハンドラーを初期化
         setup_error_handler(
@@ -56,11 +62,17 @@ def main():
         # 対話型モード専用実行
         cli = RecRadikoCLI()
         exit_code = cli.run()
-        sys.exit(exit_code)
+        
+        # 終了時の警告を抑制
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sys.exit(exit_code)
     
     except KeyboardInterrupt:
         print("\n操作がキャンセルされました")
-        sys.exit(0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sys.exit(0)
     except Exception as e:
         print(f"予期しないエラーが発生しました: {e}")
         
@@ -70,7 +82,9 @@ def main():
         except:
             pass  # エラーハンドラー自体がエラーの場合は無視
         
-        sys.exit(1)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
