@@ -1,6 +1,6 @@
 """
-CLIモジュールの単体テスト（最新実装対応版）
-2025年7月12日更新: ライブストリーミング対応・対話型モード専用CLI対応
+CLIモジュールの単体テスト（タイムフリー専用版）
+2025年7月13日作成: タイムフリー専用CLI対応・ライブ録音機能削除
 """
 
 import unittest
@@ -9,20 +9,20 @@ import sys
 import io
 import json
 import argparse
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from datetime import datetime, timedelta
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 
 from src.cli import RecRadikoCLI
 from src.auth import AuthInfo
-from src.program_info import Station, Program
-from src.recording import RecordingJob, RecordingStatus
-from src.scheduler import RecordingSchedule, RepeatPattern, ScheduleStatus
+from src.program_info import Station, ProgramInfo
+from src.timefree_recorder import TimeFreeRecorder, RecordingResult
+from src.program_history import ProgramHistoryManager
 
 
-class TestRecRadikoCLI(unittest.TestCase):
-    """RecRadikoCLI クラスのテスト（最新実装対応版）"""
+class TestTimeFreeRecRadikoCLI(unittest.TestCase):
+    """RecRadikoCLI クラスのテスト（タイムフリー専用版）"""
     
     def setUp(self):
         """テスト前の準備"""
@@ -31,30 +31,23 @@ class TestRecRadikoCLI(unittest.TestCase):
         # モックオブジェクトの作成
         self.mock_auth = Mock()
         self.mock_program_info = Mock()
-        self.mock_streaming = Mock()
-        self.mock_recording = Mock()
         self.mock_file_manager = Mock()
-        self.mock_scheduler = Mock()
         self.mock_error_handler = Mock()
         
-        # テスト用設定ファイルを作成
+        # タイムフリー専用モック
+        self.mock_timefree_recorder = Mock(spec=TimeFreeRecorder)
+        self.mock_program_history = Mock(spec=ProgramHistoryManager)
+        
+        # テスト用設定ファイルを作成（タイムフリー専用）
         test_config = {
             "area_id": "JP13",
             "premium_username": "",
             "premium_password": "",
             "output_dir": f"{self.temp_dir}/recordings",
-            "default_format": "aac",
-            "default_bitrate": 128,
-            "max_concurrent_recordings": 4,
-            "auto_cleanup_enabled": True,
-            "retention_days": 30,
-            "min_free_space_gb": 10.0,
+            "default_format": "mp3",
             "notification_enabled": True,
             "log_level": "INFO",
-            "log_file": f"{self.temp_dir}/test.log",
-            "live_streaming_enabled": True,
-            "playlist_update_interval": 5,
-            "max_concurrent_downloads": 3
+            "log_file": f"{self.temp_dir}/test.log"
         }
         
         config_file = f"{self.temp_dir}/test_config.json"
@@ -66,11 +59,27 @@ class TestRecRadikoCLI(unittest.TestCase):
             config_file=config_file,
             auth_manager=self.mock_auth,
             program_info_manager=self.mock_program_info,
-            streaming_manager=self.mock_streaming,
-            recording_manager=self.mock_recording,
             file_manager=self.mock_file_manager,
-            scheduler=self.mock_scheduler,
             error_handler=self.mock_error_handler
+        )
+        
+        # タイムフリー専用コンポーネントを手動注入
+        self.cli.timefree_recorder = self.mock_timefree_recorder
+        self.cli.program_history_manager = self.mock_program_history
+        
+        # サンプル番組情報
+        self.sample_program_info = ProgramInfo(
+            program_id="TBS_20250710_060000",
+            station_id="TBS",
+            station_name="TBSラジオ",
+            title="森本毅郎・スタンバイ!",
+            start_time=datetime(2025, 7, 10, 6, 0, 0),
+            end_time=datetime(2025, 7, 10, 8, 30, 0),
+            description="朝の情報番組",
+            performers=["森本毅郎", "寺島尚正"],
+            genre="情報番組",
+            is_timefree_available=True,
+            timefree_end_time=datetime(2025, 7, 17, 6, 0, 0)
         )
     
     def tearDown(self):
@@ -83,24 +92,42 @@ class TestRecRadikoCLI(unittest.TestCase):
         self.assertIsInstance(self.cli, RecRadikoCLI)
         self.assertEqual(self.cli.auth_manager, self.mock_auth)
         self.assertEqual(self.cli.program_info_manager, self.mock_program_info)
-        self.assertEqual(self.cli.streaming_manager, self.mock_streaming)
-        self.assertEqual(self.cli.recording_manager, self.mock_recording)
         self.assertEqual(self.cli.file_manager, self.mock_file_manager)
-        self.assertEqual(self.cli.scheduler, self.mock_scheduler)
         self.assertEqual(self.cli.error_handler, self.mock_error_handler)
+        
+        # タイムフリー専用コンポーネント確認
+        self.assertEqual(self.cli.timefree_recorder, self.mock_timefree_recorder)
+        self.assertEqual(self.cli.program_history_manager, self.mock_program_history)
     
-    def test_create_parser(self):
-        """引数パーサー作成のテスト（対話型モード専用）"""
-        parser = self.cli.create_parser()
+    def test_timefree_interactive_commands(self):
+        """タイムフリー専用対話型コマンド確認"""
+        expected_commands = [
+            'list-programs', 'record', 'record-id', 'search-programs',
+            'list-stations', 'show-region', 'list-prefectures', 
+            'status', 'help', 'exit', 'quit'
+        ]
         
-        self.assertIsInstance(parser, argparse.ArgumentParser)
-        self.assertEqual(parser.prog, 'RecRadiko')
+        for command in expected_commands:
+            self.assertIn(command, self.cli.INTERACTIVE_COMMANDS)
         
-        # ヘルプテキストに対話型モードの説明が含まれることを確認
-        help_text = parser.format_help()
-        self.assertIn('対話型モード', help_text)
-        self.assertIn('--daemon', help_text)
-        self.assertIn('--verbose', help_text)
+        # 削除されたコマンドが含まれていないことを確認
+        removed_commands = ['schedule', 'list-schedules', 'list-recordings']
+        for command in removed_commands:
+            self.assertNotIn(command, self.cli.INTERACTIVE_COMMANDS)
+    
+    def test_timefree_command_options(self):
+        """タイムフリー専用コマンドオプション確認"""
+        expected_options = {
+            'list-programs': ['--date', '--station'],
+            'record': ['--date', '--station', '--title', '--format', '--output'],
+            'record-id': ['--program-id', '--format', '--output'],
+            'search-programs': ['--keyword', '--date-range', '--station']
+        }
+        
+        for command, options in expected_options.items():
+            self.assertIn(command, self.cli.COMMAND_OPTIONS)
+            for option in options:
+                self.assertIn(option, self.cli.COMMAND_OPTIONS[command])
     
     @patch('src.cli.RecRadikoCLI._run_interactive')
     def test_interactive_mode_default(self, mock_interactive):
@@ -112,251 +139,504 @@ class TestRecRadikoCLI(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mock_interactive.assert_called_once()
     
-    def test_parser_invalid_command(self):
-        """無効なコマンドのテスト"""
-        parser = self.cli.create_parser()
-        
-        with self.assertRaises(SystemExit):
-            parser.parse_args(['invalid-command'])
-    
-    def test_run_with_invalid_args(self):
-        """無効な引数でのテスト"""
-        with redirect_stderr(io.StringIO()) as captured_error:
-            try:
-                exit_code = self.cli.run(['invalid-command'])
-                self.assertEqual(exit_code, 2)  # argparse error code
-            except SystemExit as e:
-                self.assertEqual(e.code, 2)  # argparse error code
-    
-    def test_run_with_exception(self):
-        """例外発生時のテスト"""
-        with patch.object(self.cli, '_run_interactive', side_effect=Exception("Test exception")):
-            exit_code = self.cli.run([])
-            self.assertEqual(exit_code, 1)
-    
-    def test_daemon_mode_option(self):
-        """デーモンモードオプションのテスト"""
-        parser = self.cli.create_parser()
-        args = parser.parse_args(['--daemon'])
-        
-        self.assertTrue(args.daemon)
-    
-    def test_verbose_option(self):
-        """詳細モードオプションのテスト"""
-        parser = self.cli.create_parser()
-        args = parser.parse_args(['--verbose'])
-        
-        self.assertTrue(args.verbose)
-    
-    def test_config_option(self):
-        """設定ファイルオプションのテスト"""
-        parser = self.cli.create_parser()
-        custom_config = '/path/to/custom/config.json'
-        args = parser.parse_args(['--config', custom_config])
-        
-        self.assertEqual(args.config, custom_config)
+    def test_print_interactive_help(self):
+        """対話型ヘルプ表示テスト"""
+        with redirect_stdout(io.StringIO()) as captured_output:
+            self.cli._print_interactive_help()
+            
+            help_text = captured_output.getvalue()
+            
+            # タイムフリー専用コマンドが表示されることを確認
+            self.assertIn('list-programs', help_text)
+            self.assertIn('record', help_text)
+            self.assertIn('record-id', help_text) 
+            self.assertIn('search-programs', help_text)
+            
+            # タイムフリー専用の説明が含まれることを確認
+            self.assertIn('タイムフリー専用', help_text)
+            self.assertIn('過去7日間', help_text)
+            
+            # 削除されたコマンドが表示されないことを確認
+            self.assertNotIn('schedule', help_text)
+            self.assertNotIn('list-schedules', help_text)
 
 
-class TestCLIInteractiveCommands(unittest.TestCase):
-    """CLI対話型コマンドのテスト"""
+class TestTimeFreeListProgramsCommand(unittest.TestCase):
+    """list-programsコマンドのテスト"""
     
     def setUp(self):
         """テスト前の準備"""
         self.temp_dir = tempfile.mkdtemp()
+        self.cli = self._create_test_cli()
         
-        # モックオブジェクトの作成
-        self.mock_auth = Mock()
-        self.mock_program_info = Mock()
-        self.mock_streaming = Mock()
-        self.mock_recording = Mock()
-        self.mock_file_manager = Mock()
-        self.mock_scheduler = Mock()
-        self.mock_error_handler = Mock()
-        
-        # 設定ファイル
-        test_config = {
-            "area_id": "JP13",
-            "output_dir": f"{self.temp_dir}/recordings",
-            "live_streaming_enabled": True
-        }
-        
-        config_file = f"{self.temp_dir}/test_config.json"
-        with open(config_file, 'w', encoding='utf-8') as f:
-            json.dump(test_config, f)
-        
-        self.cli = RecRadikoCLI(
-            config_file=config_file,
-            auth_manager=self.mock_auth,
-            program_info_manager=self.mock_program_info,
-            streaming_manager=self.mock_streaming,
-            recording_manager=self.mock_recording,
-            file_manager=self.mock_file_manager,
-            scheduler=self.mock_scheduler,
-            error_handler=self.mock_error_handler
-        )
-    
-    def tearDown(self):
-        """テスト後のクリーンアップ"""
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
-    def test_interactive_record_command(self):
-        """対話型recordコマンドのテスト"""
-        # 録音ジョブをモック
-        mock_job = RecordingJob(
-            id="test_job_001",
-            station_id="TBS",
-            program_title="即時録音",
-            start_time=datetime.now(),
-            end_time=datetime.now() + timedelta(minutes=60),
-            output_path="/tmp/test_recording.aac",
-            status=RecordingStatus.PENDING
-        )
-        
-        self.mock_recording.create_recording_job.return_value = mock_job
-        
-        exit_code = self.cli._execute_interactive_command(['record', 'TBS', '60'])
-        
-        self.assertEqual(exit_code, 0)
-        self.mock_recording.create_recording_job.assert_called_once()
-    
-    def test_interactive_schedule_command(self):
-        """対話型scheduleコマンドのテスト"""
-        # スケジュール追加成功をモック
-        self.mock_scheduler.add_schedule.return_value = True
-        
-        exit_code = self.cli._execute_interactive_command([
-            'schedule', 'TBS', '番組名', 
-            '2024-01-01T20:00', '2024-01-01T21:00'
-        ])
-        
-        self.assertEqual(exit_code, 0)
-        self.mock_scheduler.add_schedule.assert_called_once()
-    
-    def test_interactive_list_stations_command(self):
-        """対話型list-stationsコマンドのテスト"""
-        # 放送局リストをモック
-        mock_stations = [
-            Station(
-                id="TBS",
-                name="TBSラジオ",
-                area_id="JP13",
-                ascii_name="TBS",
-                logo_url="https://radiko.jp/res/images/TBS_logo.png"
+        self.sample_programs = [
+            ProgramInfo(
+                program_id="TBS_20250710_060000",
+                station_id="TBS",
+                station_name="TBSラジオ",
+                title="森本毅郎・スタンバイ!",
+                start_time=datetime(2025, 7, 10, 6, 0, 0),
+                end_time=datetime(2025, 7, 10, 8, 30, 0),
+                description="朝の情報番組",
+                is_timefree_available=True
             ),
-            Station(
-                id="QRR",
-                name="文化放送",
-                area_id="JP13", 
-                ascii_name="QRR",
-                logo_url="https://radiko.jp/res/images/QRR_logo.png"
+            ProgramInfo(
+                program_id="TBS_20250710_090000",
+                station_id="TBS",
+                station_name="TBSラジオ",
+                title="ジェーン・スー 生活は踊る",
+                start_time=datetime(2025, 7, 10, 9, 0, 0),
+                end_time=datetime(2025, 7, 10, 12, 0, 0),
+                description="平日お昼の番組",
+                is_timefree_available=True
             )
         ]
-        
-        self.mock_program_info.get_station_list.return_value = mock_stations
-        
-        exit_code = self.cli._execute_interactive_command(['list-stations'])
-        
-        self.assertEqual(exit_code, 0)
-        self.mock_program_info.get_station_list.assert_called_once()
-    
-    def test_interactive_status_command(self):
-        """対話型statusコマンドのテスト"""
-        # 各種ステータス情報をモック
-        self.mock_recording.get_active_jobs.return_value = []
-        self.mock_scheduler.get_next_schedules.return_value = []
-        
-        from src.file_manager import StorageInfo
-        mock_storage = StorageInfo(
-            total_space=1000000000,
-            used_space=400000000,
-            free_space=600000000,
-            recording_files_size=200000000,
-            file_count=50
-        )
-        self.mock_file_manager.get_storage_info.return_value = mock_storage
-        
-        exit_code = self.cli._execute_interactive_command(['status'])
-        
-        self.assertEqual(exit_code, 0)
-    
-    def test_interactive_help_command(self):
-        """対話型helpコマンドのテスト"""
-        exit_code = self.cli._execute_interactive_command(['help'])
-        
-        self.assertEqual(exit_code, 0)
-    
-    def test_interactive_exit_command(self):
-        """対話型exitコマンドのテスト"""
-        exit_code = self.cli._execute_interactive_command(['exit'])
-        
-        self.assertEqual(exit_code, 0)
-    
-    def test_interactive_invalid_command(self):
-        """対話型無効コマンドのテスト"""
-        exit_code = self.cli._execute_interactive_command(['invalid-command'])
-        
-        self.assertEqual(exit_code, 1)
-
-
-class TestCLILiveStreamingIntegration(unittest.TestCase):
-    """CLIライブストリーミング統合テスト"""
-    
-    def setUp(self):
-        """テスト前の準備"""
-        self.temp_dir = tempfile.mkdtemp()
-        
-        # ライブストリーミング対応設定
-        test_config = {
-            "area_id": "JP13",
-            "output_dir": f"{self.temp_dir}/recordings",
-            "live_streaming_enabled": True,
-            "playlist_update_interval": 5,
-            "max_concurrent_downloads": 3
-        }
-        
-        config_file = f"{self.temp_dir}/test_config.json"
-        with open(config_file, 'w', encoding='utf-8') as f:
-            json.dump(test_config, f)
-        
-        self.cli = RecRadikoCLI(config_file=config_file)
     
     def tearDown(self):
         """テスト後のクリーンアップ"""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
-    def test_live_streaming_config_loaded(self):
-        """ライブストリーミング設定読み込みテスト"""
-        self.assertTrue(self.cli.config.get('live_streaming_enabled', False))
-        self.assertEqual(self.cli.config.get('playlist_update_interval'), 5)
-        self.assertEqual(self.cli.config.get('max_concurrent_downloads'), 3)
-    
-    @patch('src.live_streaming.LiveRecordingSession')
-    def test_live_recording_integration(self, mock_live_session):
-        """ライブ録音統合テスト"""
-        # ライブ録音セッションのモック
-        mock_session_instance = Mock()
-        mock_live_session.return_value = mock_session_instance
+    def _create_test_cli(self):
+        """テスト用CLIインスタンス作成"""
+        config_file = f"{self.temp_dir}/test_config.json"
+        with open(config_file, 'w') as f:
+            json.dump({"area_id": "JP13"}, f)
         
-        # RecordingManagerのモック
-        with patch.object(self.cli, 'recording_manager') as mock_recording:
-            mock_job = RecordingJob(
-                id="live_test_job",
+        cli = RecRadikoCLI(config_file=config_file)
+        cli.program_history_manager = Mock(spec=ProgramHistoryManager)
+        return cli
+    
+    def test_execute_list_programs_command_success(self):
+        """list-programsコマンド実行成功"""
+        command_args = ['list-programs', '2025-07-10', '--station', 'TBS']
+        
+        self.cli.program_history_manager.get_programs_by_date.return_value = self.sample_programs
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 0)
+            output = captured_output.getvalue()
+            
+            # 番組情報が表示されることを確認
+            self.assertIn("森本毅郎・スタンバイ!", output)
+            self.assertIn("ジェーン・スー 生活は踊る", output)
+            self.assertIn("TBSラジオ", output)
+            
+            # 正しい引数でメソッドが呼ばれることを確認
+            self.cli.program_history_manager.get_programs_by_date.assert_called_once_with("2025-07-10", "TBS")
+    
+    def test_execute_list_programs_command_missing_date(self):
+        """list-programsコマンド日付指定なしエラー"""
+        command_args = ['list-programs']
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("使用法", output)
+            self.assertIn("list-programs", output)
+    
+    def test_execute_list_programs_command_no_results(self):
+        """list-programsコマンド結果なし"""
+        command_args = ['list-programs', '2025-07-10']
+        
+        self.cli.program_history_manager.get_programs_by_date.return_value = []
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 0)
+            output = captured_output.getvalue()
+            self.assertIn("番組が見つかりません", output)
+
+
+class TestTimeFreeRecordCommand(unittest.TestCase):
+    """recordコマンドのテスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.cli = self._create_test_cli()
+        
+        self.sample_program = ProgramInfo(
+            program_id="TBS_20250710_060000",
+            station_id="TBS",
+            station_name="TBSラジオ",
+            title="森本毅郎・スタンバイ!",
+            start_time=datetime(2025, 7, 10, 6, 0, 0),
+            end_time=datetime(2025, 7, 10, 8, 30, 0),
+            description="朝の情報番組",
+            is_timefree_available=True
+        )
+    
+    def tearDown(self):
+        """テスト後のクリーンアップ"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def _create_test_cli(self):
+        """テスト用CLIインスタンス作成"""
+        config_file = f"{self.temp_dir}/test_config.json"
+        with open(config_file, 'w') as f:
+            json.dump({"area_id": "JP13", "output_dir": self.temp_dir}, f)
+        
+        cli = RecRadikoCLI(config_file=config_file)
+        cli.program_history_manager = Mock(spec=ProgramHistoryManager)
+        cli.timefree_recorder = Mock(spec=TimeFreeRecorder)
+        return cli
+    
+    @patch('asyncio.run')
+    def test_execute_record_command_success(self, mock_asyncio_run):
+        """recordコマンド実行成功"""
+        command_args = ['record', '2025-07-10', 'TBS', '森本毅郎・スタンバイ!']
+        
+        # 番組検索結果をモック
+        self.cli.program_history_manager.search_programs.return_value = [self.sample_program]
+        
+        # 録音結果をモック
+        recording_result = RecordingResult(
+            success=True,
+            output_path=f"{self.temp_dir}/recording.mp3",
+            file_size_bytes=1024000,
+            recording_duration_seconds=120.0,
+            total_segments=10,
+            failed_segments=0,
+            error_messages=[]
+        )
+        mock_asyncio_run.return_value = recording_result
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 0)
+            output = captured_output.getvalue()
+            
+            # 録音開始・完了メッセージが表示されることを確認
+            self.assertIn("録音開始", output)
+            self.assertIn("録音完了", output)
+            
+            # 番組検索が実行されることを確認
+            self.cli.program_history_manager.search_programs.assert_called_once()
+            
+            # 録音が実行されることを確認
+            mock_asyncio_run.assert_called_once()
+    
+    def test_execute_record_command_missing_args(self):
+        """recordコマンド引数不足エラー"""
+        command_args = ['record', '2025-07-10']
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("使用法", output)
+    
+    def test_execute_record_command_program_not_found(self):
+        """recordコマンド番組見つからずエラー"""
+        command_args = ['record', '2025-07-10', 'TBS', '存在しない番組']
+        
+        self.cli.program_history_manager.search_programs.return_value = []
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("番組が見つかりません", output)
+    
+    @patch('asyncio.run')
+    def test_execute_record_command_recording_failed(self, mock_asyncio_run):
+        """recordコマンド録音失敗"""
+        command_args = ['record', '2025-07-10', 'TBS', '森本毅郎・スタンバイ!']
+        
+        self.cli.program_history_manager.search_programs.return_value = [self.sample_program]
+        
+        # 録音失敗結果をモック
+        recording_result = RecordingResult(
+            success=False,
+            output_path="",
+            file_size_bytes=0,
+            recording_duration_seconds=0,
+            total_segments=0,
+            failed_segments=0,
+            error_messages=["録音エラーが発生しました"]
+        )
+        mock_asyncio_run.return_value = recording_result
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("録音に失敗", output)
+
+
+class TestTimeFreeRecordIdCommand(unittest.TestCase):
+    """record-idコマンドのテスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.cli = self._create_test_cli()
+        
+        self.sample_program = ProgramInfo(
+            program_id="TBS_20250710_060000",
+            station_id="TBS",
+            station_name="TBSラジオ",
+            title="森本毅郎・スタンバイ!",
+            start_time=datetime(2025, 7, 10, 6, 0, 0),
+            end_time=datetime(2025, 7, 10, 8, 30, 0),
+            description="朝の情報番組",
+            is_timefree_available=True
+        )
+    
+    def tearDown(self):
+        """テスト後のクリーンアップ"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def _create_test_cli(self):
+        """テスト用CLIインスタンス作成"""
+        config_file = f"{self.temp_dir}/test_config.json"
+        with open(config_file, 'w') as f:
+            json.dump({"area_id": "JP13", "output_dir": self.temp_dir}, f)
+        
+        cli = RecRadikoCLI(config_file=config_file)
+        cli.program_history_manager = Mock(spec=ProgramHistoryManager)
+        cli.timefree_recorder = Mock(spec=TimeFreeRecorder)
+        return cli
+    
+    @patch('asyncio.run')
+    def test_execute_record_id_command_success(self, mock_asyncio_run):
+        """record-idコマンド実行成功"""
+        command_args = ['record-id', 'TBS_20250710_060000']
+        
+        # 番組ID検索結果をモック
+        self.cli.program_history_manager.get_program_by_id.return_value = self.sample_program
+        
+        # 録音結果をモック
+        recording_result = RecordingResult(
+            success=True,
+            output_path=f"{self.temp_dir}/recording.mp3",
+            file_size_bytes=1024000,
+            recording_duration_seconds=120.0,
+            total_segments=10,
+            failed_segments=0,
+            error_messages=[]
+        )
+        mock_asyncio_run.return_value = recording_result
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 0)
+            output = captured_output.getvalue()
+            
+            # 録音開始・完了メッセージが表示されることを確認
+            self.assertIn("録音開始", output)
+            self.assertIn("録音完了", output)
+            
+            # 番組ID検索が実行されることを確認
+            self.cli.program_history_manager.get_program_by_id.assert_called_once_with('TBS_20250710_060000')
+    
+    def test_execute_record_id_command_missing_args(self):
+        """record-idコマンド引数不足エラー"""
+        command_args = ['record-id']
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("使用法", output)
+    
+    def test_execute_record_id_command_program_not_found(self):
+        """record-idコマンド番組見つからずエラー"""
+        command_args = ['record-id', 'INVALID_20250710_060000']
+        
+        self.cli.program_history_manager.get_program_by_id.return_value = None
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("番組が見つかりません", output)
+
+
+class TestTimeFreeSearchProgramsCommand(unittest.TestCase):
+    """search-programsコマンドのテスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.cli = self._create_test_cli()
+        
+        self.sample_programs = [
+            ProgramInfo(
+                program_id="TBS_20250710_060000",
                 station_id="TBS",
-                program_title="ライブテスト",
-                start_time=datetime.now(),
-                end_time=datetime.now() + timedelta(minutes=30),
-                output_path=f"{self.temp_dir}/live_test.mp3"
+                station_name="TBSラジオ",
+                title="森本毅郎・スタンバイ!",
+                start_time=datetime(2025, 7, 10, 6, 0, 0),
+                end_time=datetime(2025, 7, 10, 8, 30, 0),
+                performers=["森本毅郎", "寺島尚正"],
+                is_timefree_available=True
+            ),
+            ProgramInfo(
+                program_id="QRR_20250710_060000",
+                station_id="QRR",
+                station_name="文化放送",
+                title="おはよう寺ちゃん",
+                start_time=datetime(2025, 7, 10, 6, 0, 0),
+                end_time=datetime(2025, 7, 10, 8, 30, 0),
+                performers=["寺島尚正"],
+                is_timefree_available=True
             )
-            mock_recording.create_recording_job.return_value = mock_job
+        ]
+    
+    def tearDown(self):
+        """テスト後のクリーンアップ"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def _create_test_cli(self):
+        """テスト用CLIインスタンス作成"""
+        config_file = f"{self.temp_dir}/test_config.json"
+        with open(config_file, 'w') as f:
+            json.dump({"area_id": "JP13"}, f)
+        
+        cli = RecRadikoCLI(config_file=config_file)
+        cli.program_history_manager = Mock(spec=ProgramHistoryManager)
+        return cli
+    
+    def test_execute_search_programs_command_success(self):
+        """search-programsコマンド実行成功"""
+        command_args = ['search-programs', '森本毅郎']
+        
+        self.cli.program_history_manager.search_programs.return_value = [self.sample_programs[0]]
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
             
-            # ライブ録音コマンド実行
-            exit_code = self.cli._execute_interactive_command(['record', 'TBS', '30'])
+            self.assertEqual(result, 0)
+            output = captured_output.getvalue()
             
-            self.assertEqual(exit_code, 0)
-            mock_recording.create_recording_job.assert_called_once()
+            # 検索結果が表示されることを確認
+            self.assertIn("森本毅郎・スタンバイ!", output)
+            self.assertIn("TBSラジオ", output)
+            
+            # 正しい引数でメソッドが呼ばれることを確認
+            self.cli.program_history_manager.search_programs.assert_called_once_with(
+                "森本毅郎", date_range=None, station_ids=None
+            )
+    
+    def test_execute_search_programs_command_with_station_filter(self):
+        """search-programsコマンド放送局フィルター付き実行"""
+        command_args = ['search-programs', '寺島尚正', '--station', 'TBS']
+        
+        self.cli.program_history_manager.search_programs.return_value = [self.sample_programs[0]]
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 0)
+            
+            # 放送局フィルターが適用されることを確認
+            self.cli.program_history_manager.search_programs.assert_called_once_with(
+                "寺島尚正", date_range=None, station_ids=["TBS"]
+            )
+    
+    def test_execute_search_programs_command_missing_keyword(self):
+        """search-programsコマンドキーワード指定なしエラー"""
+        command_args = ['search-programs']
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("使用法", output)
+    
+    def test_execute_search_programs_command_no_results(self):
+        """search-programsコマンド検索結果なし"""
+        command_args = ['search-programs', '存在しないキーワード']
+        
+        self.cli.program_history_manager.search_programs.return_value = []
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 0)
+            output = captured_output.getvalue()
+            self.assertIn("番組が見つかりません", output)
 
 
-if __name__ == '__main__':
+class TestTimeFreeErrorHandling(unittest.TestCase):
+    """タイムフリー関連エラーハンドリングテスト"""
+    
+    def setUp(self):
+        """テスト前の準備"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.cli = self._create_test_cli()
+    
+    def tearDown(self):
+        """テスト後のクリーンアップ"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def _create_test_cli(self):
+        """テスト用CLIインスタンス作成"""
+        config_file = f"{self.temp_dir}/test_config.json"
+        with open(config_file, 'w') as f:
+            json.dump({"area_id": "JP13"}, f)
+        
+        cli = RecRadikoCLI(config_file=config_file)
+        cli.program_history_manager = Mock(spec=ProgramHistoryManager)
+        cli.timefree_recorder = Mock(spec=TimeFreeRecorder)
+        return cli
+    
+    def test_list_programs_command_exception_handling(self):
+        """list-programsコマンド例外処理テスト"""
+        command_args = ['list-programs', '2025-07-10']
+        
+        self.cli.program_history_manager.get_programs_by_date.side_effect = Exception("API エラー")
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("エラー", output)
+    
+    def test_search_programs_command_exception_handling(self):
+        """search-programsコマンド例外処理テスト"""
+        command_args = ['search-programs', 'キーワード']
+        
+        self.cli.program_history_manager.search_programs.side_effect = Exception("検索エラー")
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("エラー", output)
+    
+    def test_unknown_command_handling(self):
+        """不明なコマンドの処理テスト"""
+        command_args = ['unknown-command']
+        
+        with redirect_stdout(io.StringIO()) as captured_output:
+            result = self.cli._execute_interactive_command(command_args)
+            
+            self.assertEqual(result, 1)
+            output = captured_output.getvalue()
+            self.assertIn("不明なコマンド", output)
+
+
+if __name__ == "__main__":
     unittest.main()
