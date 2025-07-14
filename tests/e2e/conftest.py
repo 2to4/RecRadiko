@@ -27,11 +27,9 @@ from src.file_manager import FileManager, FileMetadata, StorageInfo
 from src.scheduler import RecordingScheduler, RecordingSchedule, RepeatPattern, ScheduleStatus
 from src.daemon import DaemonManager, DaemonStatus
 from src.error_handler import ErrorHandler, ErrorRecord
-from src.live_streaming import (
-    LivePlaylistMonitor, SegmentTracker, SegmentDownloader, 
-    LiveRecordingSession, Segment, PlaylistUpdate
-)
-from src.live_streaming_config import get_config_for_environment
+# タイムフリー専用システム - ライブストリーミング関連は削除済み
+from src.timefree_recorder import TimeFreeRecorder, RecordingResult
+from src.program_history import ProgramHistoryManager
 
 
 @pytest.fixture(scope="session")
@@ -117,7 +115,11 @@ def test_config(temp_environment):
             "mock_external_apis": True,
             "simulate_network_conditions": True
         },
-        "live_streaming": get_config_for_environment('test')
+        "timefree_recording": {
+            "max_concurrent_downloads": 8,
+            "segment_timeout": 30,
+            "retry_attempts": 3
+        }
     }
     
     config_path = os.path.join(temp_environment["config_dir"], "config.json")
@@ -520,13 +522,17 @@ def live_streaming_environment(temp_environment):
     for dir_path in live_dirs.values():
         os.makedirs(dir_path, exist_ok=True)
     
-    # ライブストリーミング設定
-    live_config = get_config_for_environment('test')
+    # タイムフリー録音設定
+    timefree_config = {
+        "max_concurrent_downloads": 8,
+        "segment_timeout": 30,
+        "retry_attempts": 3
+    }
     
     return {
         **temp_environment,
         **live_dirs,
-        "live_config": live_config
+        "timefree_config": timefree_config
     }
 
 

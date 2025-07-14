@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import aiohttp
-import aiofiles
+# import aiofiles  # 必要に応じて後で追加
 
 from src.timefree_recorder import (
     TimeFreeRecorder, 
@@ -38,12 +38,15 @@ def mock_authenticator():
     auth = Mock(spec=RadikoAuthenticator)
     auth_info = AuthInfo(
         auth_token="test_token_123",
-        key_length=16,
-        key_offset=0,
         area_id="JP13",
-        premium=False
+        expires_at=1234567890.0,
+        premium_user=False,
+        timefree_session="timefree_token_123",
+        timefree_expires_at=1234567890.0
     )
     auth.get_valid_auth_info.return_value = auth_info
+    auth.get_timefree_playlist_url.return_value = "https://radiko.jp/v2/api/ts/playlist.m3u8?station_id=TBS&start_at=20250713120000&ft=20250713120000&to=20250713123600&type=b"
+    auth.get_timefree_session.return_value = Mock()
     return auth
 
 
@@ -105,19 +108,26 @@ class TestTimeFreeUrlGeneration:
         start_time = datetime(2025, 7, 10, 6, 0, 0)
         end_time = datetime(2025, 7, 10, 8, 30, 0)
         
+        # タイムフリーURL生成のモックを設定
+        expected_url = "https://radiko.jp/v2/api/ts/playlist.m3u8?station_id=TBS&start_at=20250710060000&ft=20250710060000&to=20250710083000&type=b"
+        mock_authenticator.get_timefree_playlist_url.return_value = expected_url
+        
         url = timefree_recorder._generate_timefree_url("TBS", start_time, end_time)
         
         # URL形式の確認
-        assert url.startswith("https://radiko.jp/v2/api/ts/playlist.m3u8")
-        assert "station_id=TBS" in url
-        assert "ft=20250710060000" in url
-        assert "to=20250710083000" in url
-        assert "lsid=test_token_123" in url
-        assert "l=15" in url
+        assert url == expected_url
+        
+        # 認証システムのメソッドが正しい引数で呼ばれたかを確認
+        mock_authenticator.get_timefree_playlist_url.assert_called_once_with(
+            station_id="TBS",
+            start_time="20250710060000",
+            duration=9000  # 2.5時間 = 9000秒
+        )
     
     def test_generate_timefree_url_auth_error(self, timefree_recorder, mock_authenticator):
         """認証エラー時のURL生成"""
-        mock_authenticator.get_valid_auth_info.side_effect = Exception("認証失敗")
+        from src.auth import AuthenticationError
+        mock_authenticator.get_timefree_playlist_url.side_effect = AuthenticationError("認証失敗")
         
         start_time = datetime(2025, 7, 10, 6, 0, 0)
         end_time = datetime(2025, 7, 10, 8, 30, 0)
@@ -131,7 +141,7 @@ class TestPlaylistFetching:
     
     @pytest.mark.asyncio
     async def test_fetch_playlist_success(self, timefree_recorder):
-        """正常なプレイリスト取得"""
+        """正常なプレイリスト取得（適切な非同期Mock）"""
         mock_playlist_content = """#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:5
@@ -145,14 +155,24 @@ segment_2.ts
 #EXT-X-ENDLIST
 """
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_response = AsyncMock()
+        # aioresponses を使用した正しい非同期Mockアプローチ
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            # Mockレスポンス作成
+            mock_response = Mock()
             mock_response.status = 200
             mock_response.text = AsyncMock(return_value=mock_playlist_content)
             
-            mock_session_instance = AsyncMock()
-            mock_session_instance.get.return_value.__aenter__.return_value = mock_response
-            mock_session.return_value.__aenter__.return_value = mock_session_instance
+            # コンテキストマネージャーを正しく設定
+            mock_session = Mock()
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_get = Mock()
+            mock_get.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_get.__aexit__ = AsyncMock(return_value=None)
+            mock_session.get = Mock(return_value=mock_get)
+            
+            mock_session_class.return_value = mock_session
             
             with patch('m3u8.loads') as mock_m3u8:
                 mock_playlist = Mock()
@@ -172,13 +192,22 @@ segment_2.ts
     @pytest.mark.asyncio
     async def test_fetch_playlist_http_error(self, timefree_recorder):
         """HTTP エラー時のプレイリスト取得"""
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_response = AsyncMock()
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            # 404エラーレスポンス
+            mock_response = Mock()
             mock_response.status = 404
             
-            mock_session_instance = AsyncMock()
-            mock_session_instance.get.return_value.__aenter__.return_value = mock_response
-            mock_session.return_value.__aenter__.return_value = mock_session_instance
+            # コンテキストマネージャーを正しく設定
+            mock_session = Mock()
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_get = Mock()
+            mock_get.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_get.__aexit__ = AsyncMock(return_value=None)
+            mock_session.get = Mock(return_value=mock_get)
+            
+            mock_session_class.return_value = mock_session
             
             playlist_url = "https://example.com/playlist.m3u8"
             
@@ -188,10 +217,14 @@ segment_2.ts
     @pytest.mark.asyncio
     async def test_fetch_playlist_network_error(self, timefree_recorder):
         """ネットワークエラー時のプレイリスト取得"""
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session_instance = AsyncMock()
-            mock_session_instance.get.side_effect = aiohttp.ClientError("Network error")
-            mock_session.return_value.__aenter__.return_value = mock_session_instance
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            # ネットワークエラーを発生させる
+            mock_session = Mock()
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            mock_session.get.side_effect = aiohttp.ClientError("Network error")
+            
+            mock_session_class.return_value = mock_session
             
             playlist_url = "https://example.com/playlist.m3u8"
             
@@ -204,7 +237,7 @@ class TestSegmentDownload:
     
     @pytest.mark.asyncio
     async def test_download_segments_concurrent_success(self, timefree_recorder):
-        """並行ダウンロード成功"""
+        """並行ダウンロード成功（適切な非同期Mock）"""
         segment_urls = [
             "https://example.com/segment_0.ts",
             "https://example.com/segment_1.ts",
@@ -213,20 +246,30 @@ class TestSegmentDownload:
         
         segment_data = [b"data0", b"data1", b"data2"]
         
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            # レスポンスモック作成
             mock_responses = []
             for data in segment_data:
-                mock_response = AsyncMock()
+                mock_response = Mock()
                 mock_response.status = 200
                 mock_response.read = AsyncMock(return_value=data)
                 mock_responses.append(mock_response)
             
-            mock_session_instance = AsyncMock()
-            mock_session_instance.get.side_effect = [
-                AsyncMock(__aenter__=AsyncMock(return_value=resp)) 
-                for resp in mock_responses
-            ]
-            mock_session.return_value.__aenter__.return_value = mock_session_instance
+            # セッションコンテキストマネージャー設定
+            mock_session = Mock()
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            
+            # レスポンスコンテキストマネージャー設定
+            mock_get_results = []
+            for resp in mock_responses:
+                mock_get = Mock()
+                mock_get.__aenter__ = AsyncMock(return_value=resp)
+                mock_get.__aexit__ = AsyncMock(return_value=None)
+                mock_get_results.append(mock_get)
+            
+            mock_session.get.side_effect = mock_get_results
+            mock_session_class.return_value = mock_session
             
             # プログレスバーをモック
             with patch('tqdm.asyncio.tqdm') as mock_tqdm:
@@ -241,28 +284,37 @@ class TestSegmentDownload:
     
     @pytest.mark.asyncio
     async def test_download_segments_with_failures(self, timefree_recorder):
-        """一部セグメントの失敗を含むダウンロード"""
+        """一部セグメントの失敗を含むダウンロード（適切な非同期Mock）"""
         segment_urls = [
             "https://example.com/segment_0.ts",
             "https://example.com/segment_1.ts"  # このセグメントは失敗
         ]
         
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch('aiohttp.ClientSession') as mock_session_class:
             # 最初のレスポンスは成功、2番目は失敗
-            mock_response_success = AsyncMock()
+            mock_response_success = Mock()
             mock_response_success.status = 200
             mock_response_success.read = AsyncMock(return_value=b"data0")
             
-            mock_response_fail = AsyncMock()
+            mock_response_fail = Mock()
             mock_response_fail.status = 404
             
-            mock_session_instance = AsyncMock()
-            responses = [mock_response_success, mock_response_fail]
-            mock_session_instance.get.side_effect = [
-                AsyncMock(__aenter__=AsyncMock(return_value=resp))
-                for resp in responses
-            ]
-            mock_session.return_value.__aenter__.return_value = mock_session_instance
+            # セッションコンテキストマネージャー設定
+            mock_session = Mock()
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            
+            # レスポンスコンテキストマネージャー設定
+            mock_get_success = Mock()
+            mock_get_success.__aenter__ = AsyncMock(return_value=mock_response_success)
+            mock_get_success.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_get_fail = Mock()
+            mock_get_fail.__aenter__ = AsyncMock(return_value=mock_response_fail)
+            mock_get_fail.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_session.get.side_effect = [mock_get_success, mock_get_fail]
+            mock_session_class.return_value = mock_session
             
             with patch('tqdm.asyncio.tqdm'):
                 with pytest.raises(SegmentDownloadError, match="1個のセグメントダウンロードに失敗"):
@@ -270,25 +322,37 @@ class TestSegmentDownload:
     
     @pytest.mark.asyncio
     async def test_download_segments_retry_mechanism(self, timefree_recorder):
-        """リトライ機構のテスト"""
-        # リトライ回数を1に設定してテストを高速化
-        timefree_recorder.retry_attempts = 1
+        """リトライ機構のテスト（適切な非同期Mock）"""
+        # リトライ回数を2に設定してテストを高速化（1回失敗→1回成功）
+        timefree_recorder.retry_attempts = 2
         
         segment_urls = ["https://example.com/segment_0.ts"]
         
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch('aiohttp.ClientSession') as mock_session_class:
             # 1回目は失敗、2回目は成功
-            responses = [
-                AsyncMock(status=500),  # 1回目失敗
-                AsyncMock(status=200, read=AsyncMock(return_value=b"data0"))  # 2回目成功
-            ]
+            mock_response_fail = Mock()
+            mock_response_fail.status = 500
             
-            mock_session_instance = AsyncMock()
-            mock_session_instance.get.side_effect = [
-                AsyncMock(__aenter__=AsyncMock(return_value=resp))
-                for resp in responses
-            ]
-            mock_session.return_value.__aenter__.return_value = mock_session_instance
+            mock_response_success = Mock()
+            mock_response_success.status = 200
+            mock_response_success.read = AsyncMock(return_value=b"data0")
+            
+            # セッションコンテキストマネージャー設定
+            mock_session = Mock()
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            
+            # レスポンスコンテキストマネージャー設定
+            mock_get_fail = Mock()
+            mock_get_fail.__aenter__ = AsyncMock(return_value=mock_response_fail)
+            mock_get_fail.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_get_success = Mock()
+            mock_get_success.__aenter__ = AsyncMock(return_value=mock_response_success)
+            mock_get_success.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_session.get.side_effect = [mock_get_fail, mock_get_success]
+            mock_session_class.return_value = mock_session
             
             with patch('tqdm.asyncio.tqdm'):
                 with patch('asyncio.sleep'):  # スリープをモック化
@@ -380,7 +444,8 @@ class TestFileConversion:
                 # FFmpegが正しい引数で呼ばれることを確認
                 mock_subprocess.assert_called_once()
                 args = mock_subprocess.call_args[0]
-                assert args[0] == ['ffmpeg', '-i', temp_ts_path, '-c:a', 'libmp3lame', '-b:a', '256k', '-y', output_path]
+                expected_cmd = ['ffmpeg', '-i', temp_ts_path, '-c:a', 'libmp3lame', '-b:a', '256k', '-y', output_path]
+                assert args == tuple(expected_cmd)
                 
         finally:
             if os.path.exists(temp_ts_path):
@@ -410,7 +475,7 @@ class TestFileConversion:
                 )
                 
                 # FFmpegが正しい引数で呼ばれることを確認
-                args = mock_subprocess.call_args[0][0]
+                args = mock_subprocess.call_args[0]
                 assert '-c:a' in args
                 assert 'aac' in args
                 
@@ -537,11 +602,11 @@ class TestMetadataEmbedding:
 
 
 class TestRecordProgram:
-    """番組録音統合テスト"""
+    """番組録音統合テスト（適切な非同期Mock）"""
     
     @pytest.mark.asyncio
     async def test_record_program_success(self, timefree_recorder, sample_program_info):
-        """番組録音の完全成功シナリオ"""
+        """番組録音の完全成功シナリオ（簡略化された統合テスト）"""
         output_path = "/tmp/test_recording.mp3"
         
         # URL生成をモック
@@ -569,30 +634,31 @@ class TestRecordProgram:
                                 with patch('tempfile.NamedTemporaryFile') as mock_temp:
                                     mock_temp_file = Mock()
                                     mock_temp_file.name = "/tmp/temp_file.ts"
-                                    mock_temp.__enter__.return_value = mock_temp_file
+                                    mock_temp.return_value.__enter__.return_value = mock_temp_file
                                     
-                                    # os.path.getsize をモック
-                                    with patch('os.path.getsize', return_value=1024000):  # 1MB
-                                        with patch('os.unlink'):
-                                            
-                                            result = await timefree_recorder.record_program(
-                                                sample_program_info, output_path
-                                            )
-                                            
-                                            assert result.success == True
-                                            assert result.output_path == output_path
-                                            assert result.file_size_bytes == 1024000
-                                            assert result.total_segments == 2
-                                            assert result.failed_segments == 0
-                                            assert len(result.error_messages) == 0
-                                            
-                                            # 各メソッドが呼ばれることを確認
-                                            mock_url_gen.assert_called_once()
-                                            mock_fetch.assert_called_once()
-                                            mock_download.assert_called_once()
-                                            mock_combine.assert_called_once()
-                                            mock_convert.assert_called_once()
-                                            mock_metadata.assert_called_once()
+                                    # os.path.getsize をモック（正しいモジュールパス）
+                                    with patch('src.timefree_recorder.os.path.getsize', return_value=1024000):  # 1MB
+                                        with patch('src.timefree_recorder.os.path.exists', return_value=True):
+                                            with patch('src.timefree_recorder.os.unlink'):
+                                                
+                                                result = await timefree_recorder.record_program(
+                                                    sample_program_info, output_path
+                                                )
+                                                
+                                                assert result.success == True
+                                                assert result.output_path == output_path
+                                                assert result.file_size_bytes == 1024000
+                                                assert result.total_segments == 2
+                                                assert result.failed_segments == 0
+                                                assert len(result.error_messages) == 0
+                                                
+                                                # 各メソッドが呼ばれることを確認
+                                                mock_url_gen.assert_called_once()
+                                                mock_fetch.assert_called_once()
+                                                mock_download.assert_called_once()
+                                                mock_combine.assert_called_once()
+                                                mock_convert.assert_called_once()
+                                                mock_metadata.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_record_program_timefree_not_available(self, timefree_recorder, sample_program_info):

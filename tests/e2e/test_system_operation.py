@@ -35,10 +35,9 @@ from src.file_manager import FileManager, FileMetadata
 from src.scheduler import RecordingScheduler, RecordingSchedule, RepeatPattern, ScheduleStatus
 from src.daemon import DaemonManager, DaemonStatus
 from src.error_handler import ErrorHandler
-from src.live_streaming import (
-    LivePlaylistMonitor, SegmentTracker, LiveRecordingSession, 
-    SegmentDownloader, RecordingResult, Segment
-)
+# タイムフリー専用システム - ライブストリーミング関連は削除済み
+from src.timefree_recorder import TimeFreeRecorder, RecordingResult
+from src.program_history import ProgramHistoryManager
 
 
 @pytest.mark.e2e
@@ -472,7 +471,7 @@ class TestLiveStreamingSystemOperation:
         config_path, config_dict = test_config
         
         # ライブストリーミング設定
-        live_config = {
+        timefree_config = {
             **config_dict,
             'live_streaming_enabled': True,
             'playlist_update_interval': 5,
@@ -495,13 +494,9 @@ class TestLiveStreamingSystemOperation:
             'active_sessions': 0
         }
         
-        # ライブストリーミングコンポーネント初期化
-        monitor = LivePlaylistMonitor(
-            "https://example.com/test.m3u8",
-            update_interval=live_config['playlist_update_interval']
-        )
-        tracker = SegmentTracker(buffer_size=live_config['segment_buffer_size'])
-        downloader = SegmentDownloader(max_concurrent=live_config['max_concurrent_downloads'])
+        # タイムフリー専用システム - コンポーネント初期化
+        recorder = TimeFreeRecorder()
+        history_manager = ProgramHistoryManager()
         
         # 連続稼働テスト実行
         print("🔴 ライブストリーミング連続稼働テスト開始...")

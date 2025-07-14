@@ -101,6 +101,13 @@ class StreamingManager:
             
             # タイムシフト再生の場合
             if start_time:
+                # タイムフリー認証を実行
+                try:
+                    timefree_session = self.authenticator.authenticate_timefree()
+                    self.logger.info(f"タイムフリー認証成功: {timefree_session[:10]}...")
+                except Exception as e:
+                    self.logger.warning(f"タイムフリー認証失敗: {e}")
+                
                 # タイムフリー用パラメータ
                 params = {
                     'station_id': station_id,

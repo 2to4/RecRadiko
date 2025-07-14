@@ -46,6 +46,42 @@ class TestAuthInfo(unittest.TestCase):
             expires_at=time.time() - 3600
         )
         self.assertTrue(auth_info_expired.is_expired())
+    
+    def test_timefree_session_expiration(self):
+        """タイムフリーセッション有効期限チェックのテスト"""
+        current_time = time.time()
+        
+        # タイムフリーセッションが設定されていない場合
+        auth_info = AuthInfo(
+            auth_token="test_token",
+            area_id="JP13",
+            expires_at=current_time + 3600
+        )
+        self.assertTrue(auth_info.is_timefree_session_expired())
+        
+        # タイムフリーセッションが有効な場合
+        auth_info.timefree_session = "timefree_token"
+        auth_info.timefree_expires_at = current_time + 1800
+        self.assertFalse(auth_info.is_timefree_session_expired())
+        
+        # タイムフリーセッションが期限切れの場合
+        auth_info.timefree_expires_at = current_time - 1800
+        self.assertTrue(auth_info.is_timefree_session_expired())
+    
+    def test_auth_info_with_timefree(self):
+        """タイムフリー情報付きAuthInfoの作成テスト"""
+        auth_info = AuthInfo(
+            auth_token="test_token",
+            area_id="JP13",
+            expires_at=time.time() + 3600,
+            premium_user=True,
+            timefree_session="timefree_token",
+            timefree_expires_at=time.time() + 1800
+        )
+        
+        self.assertEqual(auth_info.timefree_session, "timefree_token")
+        self.assertIsNotNone(auth_info.timefree_expires_at)
+        self.assertFalse(auth_info.is_timefree_session_expired())
 
 
 class TestLocationInfo(unittest.TestCase):
@@ -452,6 +488,180 @@ class TestRadikoAuthenticator(unittest.TestCase):
             
             # sleepが1回呼ばれたことを確認（1回の失敗後のリトライ待機）
             self.assertEqual(mock_sleep.call_count, 1)
+
+
+class TestTimeFreeAuthentication(unittest.TestCase):
+    """タイムフリー認証のテスト"""
+    
+    def setUp(self):
+        """テスト前のセットアップ"""
+        self.authenticator = RadikoAuthenticator(config_path="test_auth_timefree.json")
+        
+        # 基本認証済みの状態を設定
+        self.authenticator.auth_info = AuthInfo(
+            auth_token="base_auth_token",
+            area_id="JP13",
+            expires_at=time.time() + 3600
+        )
+    
+    def tearDown(self):
+        """テスト後のクリーンアップ"""
+        import os
+        config_files = ["test_auth_timefree.json", "encryption.key"]
+        for file in config_files:
+            if os.path.exists(file):
+                os.remove(file)
+    
+    @patch('src.auth.requests.Session.get')
+    def test_authenticate_timefree_success(self, mock_get):
+        """タイムフリー認証成功のテスト"""
+        # タイムフリー認証レスポンスをモック
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.headers = {
+            'X-Radiko-TimeFree-Token': 'timefree_token_123'
+        }
+        mock_get.return_value = mock_response
+        
+        # タイムフリー認証実行
+        timefree_session = self.authenticator.authenticate_timefree()
+        
+        # 結果を確認
+        self.assertEqual(timefree_session, 'timefree_token_123')
+        self.assertEqual(self.authenticator.auth_info.timefree_session, 'timefree_token_123')
+        self.assertIsNotNone(self.authenticator.auth_info.timefree_expires_at)
+        self.assertFalse(self.authenticator.auth_info.is_timefree_session_expired())
+        
+        # リクエストヘッダーを確認
+        args, kwargs = mock_get.call_args
+        self.assertEqual(args[0], self.authenticator.TIMEFREE_AUTH_URL)
+        self.assertIn('X-Radiko-AuthToken', kwargs['headers'])
+        self.assertEqual(kwargs['headers']['X-Radiko-AuthToken'], 'base_auth_token')
+        self.assertEqual(kwargs['headers']['X-Radiko-App'], 'pc_ts')
+    
+    @patch('src.auth.requests.Session.get')
+    def test_authenticate_timefree_no_token(self, mock_get):
+        """タイムフリー認証でトークンが取得できない場合のテスト"""
+        # トークンなしのレスポンスをモック
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.headers = {}  # トークンなし
+        mock_get.return_value = mock_response
+        
+        # エラーが発生することを確認
+        with self.assertRaises(AuthenticationError) as context:
+            self.authenticator.authenticate_timefree()
+        
+        self.assertIn("タイムフリーセッショントークンが取得できませんでした", str(context.exception))
+    
+    @patch('src.auth.requests.Session.get')
+    def test_authenticate_timefree_request_error(self, mock_get):
+        """タイムフリー認証でリクエストエラーが発生する場合のテスト"""
+        mock_get.side_effect = requests.RequestException("Network error")
+        
+        # エラーが発生することを確認
+        with self.assertRaises(AuthenticationError) as context:
+            self.authenticator.authenticate_timefree()
+        
+        self.assertIn("タイムフリー認証に失敗しました", str(context.exception))
+    
+    def test_authenticate_timefree_cached_session(self):
+        """キャッシュされたタイムフリーセッションの使用テスト"""
+        # 有効なタイムフリーセッションを設定
+        self.authenticator.auth_info.timefree_session = "cached_timefree_token"
+        self.authenticator.auth_info.timefree_expires_at = time.time() + 1800
+        
+        # モックしないでそのまま実行
+        timefree_session = self.authenticator.authenticate_timefree()
+        
+        # キャッシュされたセッションが返されることを確認
+        self.assertEqual(timefree_session, "cached_timefree_token")
+    
+    @patch('src.auth.requests.Session.get')
+    def test_authenticate_timefree_force_refresh(self, mock_get):
+        """強制リフレッシュのテスト"""
+        # 有効なキャッシュがあるが強制リフレッシュ
+        self.authenticator.auth_info.timefree_session = "old_timefree_token"
+        self.authenticator.auth_info.timefree_expires_at = time.time() + 1800
+        
+        # 新しいトークンのレスポンスをモック
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.headers = {
+            'X-Radiko-TimeFree-Token': 'new_timefree_token'
+        }
+        mock_get.return_value = mock_response
+        
+        # 強制リフレッシュで認証実行
+        timefree_session = self.authenticator.authenticate_timefree(force_refresh=True)
+        
+        # 新しいトークンが取得されることを確認
+        self.assertEqual(timefree_session, 'new_timefree_token')
+        self.assertEqual(self.authenticator.auth_info.timefree_session, 'new_timefree_token')
+    
+    def test_get_timefree_playlist_url(self):
+        """タイムフリープレイリストURL生成のテスト"""
+        # タイムフリーセッションを設定
+        self.authenticator.auth_info.timefree_session = "timefree_token_123"
+        self.authenticator.auth_info.timefree_expires_at = time.time() + 1800
+        
+        # プレイリストURL生成
+        playlist_url = self.authenticator.get_timefree_playlist_url(
+            station_id="TBS",
+            start_time="20250713120000",
+            duration=3600
+        )
+        
+        # URLの構造を確認
+        self.assertIn(self.authenticator.TIMEFREE_PLAYLIST_URL, playlist_url)
+        self.assertIn("station_id=TBS", playlist_url)
+        self.assertIn("start_at=20250713120000", playlist_url)
+        self.assertIn("ft=20250713120000", playlist_url)
+        self.assertIn("to=20250713123600", playlist_url)  # start_time + duration
+        self.assertIn("type=b", playlist_url)
+    
+    @patch.object(RadikoAuthenticator, 'authenticate_timefree')
+    def test_get_timefree_session(self, mock_authenticate_timefree):
+        """タイムフリーセッション取得のテスト"""
+        mock_authenticate_timefree.return_value = "timefree_token_123"
+        
+        # セッション取得
+        session = self.authenticator.get_timefree_session()
+        
+        # セッションが返されることを確認
+        self.assertIsInstance(session, requests.Session)
+        
+        # タイムフリー認証が呼ばれたことを確認
+        mock_authenticate_timefree.assert_called_once()
+    
+    @patch('src.auth.requests.Session.get')
+    def test_authenticate_timefree_without_base_auth(self, mock_get):
+        """基本認証なしでタイムフリー認証を試行するテスト"""
+        # 基本認証情報をクリア
+        self.authenticator.auth_info = None
+        
+        # get_valid_auth_info をモック
+        with patch.object(self.authenticator, 'get_valid_auth_info') as mock_get_valid_auth:
+            mock_get_valid_auth.return_value = AuthInfo(
+                auth_token="auto_auth_token",
+                area_id="JP13",
+                expires_at=time.time() + 3600
+            )
+            
+            # タイムフリー認証レスポンスをモック
+            mock_response = Mock()
+            mock_response.raise_for_status.return_value = None
+            mock_response.headers = {
+                'X-Radiko-TimeFree-Token': 'timefree_token_auto'
+            }
+            mock_get.return_value = mock_response
+            
+            # タイムフリー認証実行
+            timefree_session = self.authenticator.authenticate_timefree()
+            
+            # 基本認証が自動実行され、タイムフリー認証が成功することを確認
+            mock_get_valid_auth.assert_called_once()
+            self.assertEqual(timefree_session, 'timefree_token_auto')
 
 
 if __name__ == '__main__':

@@ -270,7 +270,7 @@ class ProgramInfoManager:
             self.logger.error(f"データベース初期化エラー: {e}")
             raise ProgramInfoError(f"データベースの初期化に失敗しました: {e}")
     
-    def fetch_station_list(self, force_update: bool = False) -> List[Station]:
+    def get_station_list(self, force_update: bool = False) -> List[Station]:
         """放送局リストを取得"""
         try:
             # キャッシュをチェック
@@ -753,7 +753,7 @@ if __name__ == "__main__":
         manager = ProgramInfoManager(area_id="JP13")
         
         print("放送局リストを取得中...")
-        stations = manager.fetch_station_list()
+        stations = manager.get_station_list()
         print(f"放送局数: {len(stations)}")
         for station in stations[:5]:  # 最初の5局を表示
             print(f"  {station.id}: {station.name}")

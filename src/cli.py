@@ -963,7 +963,7 @@ class RecRadikoCLI:
     def _cmd_list_stations(self, args):
         """放送局一覧コマンド"""
         try:
-            stations = self.program_info_manager.fetch_station_list()
+            stations = self.program_info_manager.get_station_list()
             
             print(f"放送局一覧 ({len(stations)} 局)")
             print("-" * 50)
@@ -991,7 +991,8 @@ class RecRadikoCLI:
                 print("使用法: list-programs --station <放送局ID>")
                 return 1
             
-            programs = self.program_info_manager.fetch_program_guide(date, args.station_id)
+            # タイムフリー専用システムでは program_history_manager を使用
+            programs = self.program_history_manager.get_programs_by_date(date.strftime('%Y-%m-%d'), args.station_id)
             
             print(f"{args.station_id} 番組表 ({date.strftime('%Y-%m-%d')})")
             print("-" * 70)
@@ -1562,6 +1563,140 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
             return 1
         except Exception as e:
             print(f"コマンド実行エラー: {e}")
+            return 1
+
+    def _cmd_timefree_record(self, args):
+        """タイムフリー録音コマンド（日付・番組名指定）"""
+        try:
+            # TimeFreeRecorderの初期化
+            if self.timefree_recorder is None:
+                self.timefree_recorder = TimeFreeRecorder(self.authenticator)
+            
+            # 番組検索（対話型コマンドからの呼び出しでは args.title、直接コマンドからでは args.program_title）
+            program_title = getattr(args, 'program_title', None) or getattr(args, 'title', None)
+            programs = self.program_history_manager.search_programs(program_title, station_ids=[args.station_id] if args.station_id else None)
+            target_programs = [p for p in programs if p.start_time.strftime('%Y-%m-%d') == args.date]
+            
+            if not target_programs:
+                print(f"番組が見つかりません: {args.date} {args.station_id} '{program_title}'")
+                return 1
+            
+            program = target_programs[0]  # 最初の候補を使用
+            
+            # 出力パス生成
+            output_path = args.output or f"./recordings/{program.station_id}_{program.start_time.strftime('%Y%m%d_%H%M%S')}_{program.title}.{args.format}"
+            
+            print(f"タイムフリー録音開始: {program.title}")
+            print(f"放送局: {program.station_id}, 日時: {program.start_time.strftime('%Y-%m-%d %H:%M')}")
+            
+            # 非同期録音実行
+            import asyncio
+            result = asyncio.run(self.timefree_recorder.record_program(program, output_path))
+            
+            if result.success:
+                print(f"✅ 録音完了: {output_path}")
+                print(f"ファイルサイズ: {result.file_size_bytes / 1024 / 1024:.1f}MB")
+                return 0
+            else:
+                print(f"❌ 録音失敗: {', '.join(result.error_messages)}")
+                return 1
+                
+        except Exception as e:
+            print(f"エラー: {e}")
+            return 1
+
+    def _cmd_timefree_record_by_id(self, args):
+        """タイムフリー録音コマンド（番組ID指定）"""
+        try:
+            # TimeFreeRecorderの初期化
+            if self.timefree_recorder is None:
+                self.timefree_recorder = TimeFreeRecorder(self.authenticator)
+            
+            # 番組ID検索
+            program = self.program_history_manager.get_program_by_id(args.program_id)
+            
+            if not program:
+                print(f"番組が見つかりません: {args.program_id}")
+                return 1
+            
+            # 出力パス生成
+            output_path = args.output or f"./recordings/{program.station_id}_{program.start_time.strftime('%Y%m%d_%H%M%S')}_{program.title}.{args.format}"
+            
+            print(f"タイムフリー録音開始: {program.title}")
+            print(f"放送局: {program.station_id}, 日時: {program.start_time.strftime('%Y-%m-%d %H:%M')}")
+            
+            # 非同期録音実行
+            import asyncio
+            result = asyncio.run(self.timefree_recorder.record_program(program, output_path))
+            
+            if result.success:
+                print(f"✅ 録音完了: {output_path}")
+                print(f"ファイルサイズ: {result.file_size_bytes / 1024 / 1024:.1f}MB")
+                return 0
+            else:
+                print(f"❌ 録音失敗: {', '.join(result.error_messages)}")
+                return 1
+                
+        except Exception as e:
+            print(f"エラー: {e}")
+            return 1
+
+    def _cmd_timefree_list_programs(self, args):
+        """タイムフリー番組表コマンド"""
+        try:
+            programs = self.program_history_manager.get_programs_by_date(args.date, args.station_id)
+            
+            if not programs:
+                print(f"番組が見つかりません: {args.date} {args.station_id}")
+                return 0
+            
+            print(f"{args.station_id} 番組表 ({args.date})")
+            print("-" * 70)
+            
+            for program in programs:
+                start_str = program.start_time.strftime('%H:%M')
+                end_str = program.end_time.strftime('%H:%M')
+                print(f"{start_str}-{end_str} {program.title}")
+                
+                if program.performers:
+                    print(f"    出演: {', '.join(program.performers)}")
+                if program.description:
+                    desc = program.description[:100] + "..." if len(program.description) > 100 else program.description
+                    print(f"    内容: {desc}")
+                print()
+            
+            return 0
+            
+        except Exception as e:
+            print(f"エラー: {e}")
+            return 1
+
+    def _cmd_search_programs(self, args):
+        """番組検索コマンド"""
+        try:
+            programs = self.program_history_manager.search_programs(
+                args.keyword, 
+                station_ids=getattr(args, 'station_ids', None)
+            )
+            
+            if not programs:
+                print(f"キーワード '{args.keyword}' に一致する番組が見つかりません")
+                return 0
+            
+            print(f"検索結果: '{args.keyword}' ({len(programs)}件)")
+            print("-" * 70)
+            
+            for program in programs:
+                start_str = program.start_time.strftime('%Y-%m-%d %H:%M')
+                print(f"{start_str} [{program.station_id}] {program.title}")
+                if program.performers:
+                    print(f"    出演: {', '.join(program.performers)}")
+                print()
+            
+            return 0
+            
+        except Exception as e:
+            print(f"エラー: {e}")
             return 1
 
 

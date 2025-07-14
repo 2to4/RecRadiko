@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Any
 import aiohttp
-import aiofiles
+# import aiofiles  # 必要に応じて後で追加
 from dataclasses import dataclass
 
 from .auth import RadikoAuthenticator, AuthenticationError
@@ -207,31 +207,16 @@ class TimeFreeRecorder:
             
         Returns:
             str: タイムフリーM3U8 URL
-            
-        URL形式:
-        https://radiko.jp/v2/api/ts/playlist.m3u8?station_id={STATION}&l=15&lsid={LSID}&ft={START}&to={END}
         """
         try:
-            # 認証情報取得
-            auth_info = self.authenticator.get_valid_auth_info()
+            # タイムフリー専用URL生成（直接形式）
+            ft = start_time.strftime('%Y%m%d%H%M%S')
+            to = end_time.strftime('%Y%m%d%H%M%S')
             
-            # URLパラメータ構築
-            params = {
-                'station_id': station_id,
-                'l': '15',  # セッション長（固定値）
-                'lsid': auth_info.auth_token,  # セッションID
-                'ft': start_time.strftime('%Y%m%d%H%M%S'),  # 開始時刻
-                'to': end_time.strftime('%Y%m%d%H%M%S')     # 終了時刻
-            }
+            playlist_url = f"https://radiko.jp/v2/api/ts/playlist.m3u8?station_id={station_id}&ft={ft}&to={to}"
             
-            # URLクエリ文字列生成
-            import urllib.parse
-            query_string = urllib.parse.urlencode(params)
-            
-            url = f"{self.TIMEFREE_URL_API}?{query_string}"
-            self.logger.debug(f"タイムフリーURL生成: {url}")
-            
-            return url
+            self.logger.debug(f"タイムフリーURL生成: {playlist_url}")
+            return playlist_url
             
         except AuthenticationError as e:
             raise TimeFreeAuthError(f"認証に失敗しました: {e}")
@@ -251,40 +236,70 @@ class TimeFreeRecorder:
             PlaylistFetchError: プレイリスト取得エラー
         """
         try:
-            # 認証ヘッダー準備
-            auth_info = self.authenticator.get_valid_auth_info()
+            # タイムフリー認証トークン取得
+            timefree_token = self.authenticator.authenticate_timefree()
+            if not timefree_token:
+                raise PlaylistFetchError("タイムフリー認証に失敗しました")
+            
+            # 2025年Radiko仕様に合わせたヘッダー設定
             headers = {
-                'X-Radiko-AuthToken': auth_info.auth_token,
-                'X-Radiko-AreaId': auth_info.area_id,
-                'User-Agent': 'RecRadiko/1.0',
-                'Accept': '*/*'
+                'User-Agent': 'curl/7.56.1',
+                'Accept': '*/*',
+                'Accept-Language': 'ja,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'X-Radiko-App': 'pc_html5',
+                'X-Radiko-App-Version': '0.0.1',
+                'X-Radiko-User': 'dummy_user',
+                'X-Radiko-Device': 'pc',
+                'X-Radiko-AuthToken': timefree_token
             }
             
             async with aiohttp.ClientSession(headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as session:
                 async with session.get(playlist_url) as response:
                     if response.status != 200:
+                        error_text = await response.text()
+                        self.logger.error(f"プレイリスト取得エラー詳細: URL={playlist_url}")
+                        self.logger.error(f"ステータス: {response.status}, レスポンス: {error_text}")
+                        self.logger.error(f"リクエストヘッダー: {headers}")
                         raise PlaylistFetchError(f"プレイリスト取得失敗: HTTP {response.status}")
                     
                     playlist_content = await response.text()
+                    self.logger.debug(f"プレイリスト内容: {playlist_content[:500]}...")
                     
-                    # M3U8プレイリスト解析
-                    import m3u8
-                    playlist = m3u8.loads(playlist_content, uri=playlist_url)
+                    # Radikoの2段階プレイリスト対応
+                    # 1段目: playlist.m3u8 (ストリーム情報)
+                    # 2段目: chunklist.m3u8 (実際のセグメント)
                     
-                    # セグメントURL抽出
-                    segment_urls = []
-                    for segment in playlist.segments:
-                        # 相対URLを絶対URLに変換
-                        if segment.uri.startswith(('http://', 'https://')):
-                            segment_url = segment.uri
-                        else:
-                            import urllib.parse
-                            segment_url = urllib.parse.urljoin(playlist_url, segment.uri)
+                    # chunklistのURLを抽出
+                    chunklist_url = None
+                    for line in playlist_content.strip().split('\n'):
+                        if line.startswith('https://') and 'chunklist' in line:
+                            chunklist_url = line.strip()
+                            break
+                    
+                    if not chunklist_url:
+                        raise PlaylistFetchError("chunklistURLが見つかりません")
+                    
+                    self.logger.debug(f"chunklist URL: {chunklist_url}")
+                    
+                    # chunklistを取得
+                    async with session.get(chunklist_url) as chunklist_response:
+                        if chunklist_response.status != 200:
+                            error_text = await chunklist_response.text()
+                            raise PlaylistFetchError(f"chunklist取得失敗: HTTP {chunklist_response.status}")
                         
-                        segment_urls.append(segment_url)
-                    
-                    self.logger.info(f"プレイリスト解析完了: {len(segment_urls)}セグメント")
-                    return segment_urls
+                        chunklist_content = await chunklist_response.text()
+                        self.logger.debug(f"chunklist内容: {chunklist_content[:500]}...")
+                        
+                        # セグメントURL抽出
+                        segment_urls = []
+                        for line in chunklist_content.strip().split('\n'):
+                            if line.startswith('https://') and '.aac' in line:
+                                segment_urls.append(line.strip())
+                        
+                        self.logger.info(f"プレイリスト解析完了: {len(segment_urls)}セグメント")
+                        return segment_urls
                     
         except Exception as e:
             raise PlaylistFetchError(f"プレイリスト取得エラー: {e}")
@@ -307,13 +322,22 @@ class TimeFreeRecorder:
             segment_data = [None] * len(segment_urls)
             failed_segments = []
             
-            # 認証ヘッダー準備
-            auth_info = self.authenticator.get_valid_auth_info()
+            # タイムフリー認証ヘッダー準備
+            timefree_token = self.authenticator.authenticate_timefree()
+            if not timefree_token:
+                raise SegmentDownloadError("タイムフリー認証に失敗しました")
+            
             headers = {
-                'X-Radiko-AuthToken': auth_info.auth_token,
-                'X-Radiko-AreaId': auth_info.area_id,
-                'User-Agent': 'RecRadiko/1.0',
-                'Accept': '*/*'
+                'User-Agent': 'curl/7.56.1',
+                'Accept': '*/*',
+                'Accept-Language': 'ja,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'X-Radiko-App': 'pc_html5',
+                'X-Radiko-App-Version': '0.0.1',
+                'X-Radiko-User': 'dummy_user',
+                'X-Radiko-Device': 'pc',
+                'X-Radiko-AuthToken': timefree_token
             }
             
             # プログレスバー表示用

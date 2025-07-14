@@ -1,8 +1,8 @@
 """
-結合テスト実行用テストランナー
+タイムフリー専用結合テスト実行用テストランナー
 
-このモジュールは、RecRadikoの結合テストを効率的に実行するためのテストランナーです。
-- 結合テストの実行順序制御
+このモジュールは、RecRadikoのタイムフリー専用結合テストを効率的に実行するためのテストランナーです。
+- タイムフリー統合テストの実行順序制御
 - テスト環境のセットアップ・クリーンアップ
 - 結果レポートの生成
 """
@@ -16,10 +16,8 @@ from datetime import datetime
 from typing import Dict, List, Any
 from pathlib import Path
 
-# テストモジュールのインポート
-from . import test_e2e_recording
-from . import test_scheduling_integration
-from . import test_cli_integration
+# タイムフリー専用テストモジュールのインポート
+from . import test_timefree_integration
 
 
 class IntegrationTestRunner:
@@ -39,11 +37,9 @@ class IntegrationTestRunner:
         
         self.start_time = datetime.now()
         
-        # テストスイートの定義
+        # タイムフリー専用テストスイートの定義
         test_suites = [
-            ("エンドツーエンド録音テスト", test_e2e_recording),
-            ("スケジューリング統合テスト", test_scheduling_integration),
-            ("CLI統合テスト", test_cli_integration),
+            ("タイムフリー統合テスト", test_timefree_integration),
         ]
         
         total_tests = 0

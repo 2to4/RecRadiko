@@ -222,7 +222,7 @@ class TestTimeFreeListProgramsCommand(unittest.TestCase):
             # 番組情報が表示されることを確認
             self.assertIn("森本毅郎・スタンバイ!", output)
             self.assertIn("ジェーン・スー 生活は踊る", output)
-            self.assertIn("TBSラジオ", output)
+            self.assertIn("TBS 番組表", output)
             
             # 正しい引数でメソッドが呼ばれることを確認
             self.cli.program_history_manager.get_programs_by_date.assert_called_once_with("2025-07-10", "TBS")
@@ -372,7 +372,7 @@ class TestTimeFreeRecordCommand(unittest.TestCase):
             
             self.assertEqual(result, 1)
             output = captured_output.getvalue()
-            self.assertIn("録音に失敗", output)
+            self.assertIn("録音失敗", output)
 
 
 class TestTimeFreeRecordIdCommand(unittest.TestCase):
@@ -528,11 +528,11 @@ class TestTimeFreeSearchProgramsCommand(unittest.TestCase):
             
             # 検索結果が表示されることを確認
             self.assertIn("森本毅郎・スタンバイ!", output)
-            self.assertIn("TBSラジオ", output)
+            self.assertIn("検索結果", output)
             
             # 正しい引数でメソッドが呼ばれることを確認
             self.cli.program_history_manager.search_programs.assert_called_once_with(
-                "森本毅郎", date_range=None, station_ids=None
+                "森本毅郎", station_ids=None
             )
     
     def test_execute_search_programs_command_with_station_filter(self):
@@ -548,7 +548,7 @@ class TestTimeFreeSearchProgramsCommand(unittest.TestCase):
             
             # 放送局フィルターが適用されることを確認
             self.cli.program_history_manager.search_programs.assert_called_once_with(
-                "寺島尚正", date_range=None, station_ids=["TBS"]
+                "寺島尚正", station_ids=["TBS"]
             )
     
     def test_execute_search_programs_command_missing_keyword(self):

@@ -29,10 +29,18 @@ class AuthInfo:
     area_id: str
     expires_at: float
     premium_user: bool = False
+    timefree_session: Optional[str] = None
+    timefree_expires_at: Optional[float] = None
     
     def is_expired(self) -> bool:
         """認証トークンが期限切れかどうかをチェック"""
         return time.time() >= self.expires_at
+    
+    def is_timefree_session_expired(self) -> bool:
+        """タイムフリーセッションが期限切れかどうかをチェック"""
+        if not self.timefree_session or not self.timefree_expires_at:
+            return True
+        return time.time() >= self.timefree_expires_at
 
 
 @dataclass
@@ -52,16 +60,24 @@ class RadikoAuthenticator:
     AUTH2_URL = "https://radiko.jp/v2/api/auth2"
     PREMIUM_LOGIN_URL = "https://radiko.jp/ap/member/webapi/member/login"
     
+    # タイムフリー関連エンドポイント
+    TIMEFREE_AUTH_URL = "https://radiko.jp/v2/api/auth1"  # 基本認証と同じエンドポイント
+    TIMEFREE_PLAYLIST_URL = "https://radiko.jp/v2/api/ts/playlist.m3u8"
+    
     # Radiko認証キー（固定値）
     AUTH_KEY = "bcd151073c03b352e1ef2fd66c32209da9ca0afa"
     
-    # 認証に必要なヘッダー
+    # 認証に必要なヘッダー（2025年仕様）
     DEFAULT_HEADERS = {
         'User-Agent': 'curl/7.56.1',
         'Accept': '*/*',
         'Accept-Language': 'ja,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'X-Radiko-App': 'pc_html5',
+        'X-Radiko-App-Version': '0.0.1',
+        'X-Radiko-User': 'dummy_user',
+        'X-Radiko-Device': 'pc'
     }
     
     def __init__(self, config_path: str = "auth_config.json"):
@@ -157,6 +173,16 @@ class RadikoAuthenticator:
         try:
             response = self.session.get("https://ipapi.co/json/", timeout=10)
             response.raise_for_status()
+            
+            # レスポンス内容を確認してJSONかどうかチェック
+            content_type = response.headers.get('content-type', '').lower()
+            if 'application/json' not in content_type:
+                raise ValueError(f"JSON以外のレスポンス: {content_type}")
+            
+            # 空のレスポンスチェック
+            if not response.text.strip():
+                raise ValueError("空のレスポンス")
+            
             data = response.json()
             
             # 日本の地域IDマッピング
@@ -190,7 +216,7 @@ class RadikoAuthenticator:
                 country=country
             )
         except Exception as e:
-            self.logger.error(f"ipapi.co エラー: {e}")
+            self.logger.debug(f"ipapi.co エラー: {e}")
             return None
     
     def _get_location_ipapi_com(self) -> Optional[LocationInfo]:
@@ -248,12 +274,8 @@ class RadikoAuthenticator:
                 self.logger.info(f"Radiko基本認証を開始 (試行 {attempt + 1}/{max_retries})")
                 
                 # Step 1: 認証開始リクエスト
-                auth1_headers = {
-                    'X-Radiko-App': 'pc_html5',
-                    'X-Radiko-App-Version': '0.0.1',
-                    'X-Radiko-User': 'dummy_user',
-                    'X-Radiko-Device': 'pc'
-                }
+                # DEFAULT_HEADERSに既に設定済みなので追加不要
+                auth1_headers = {}
                 
                 auth1_response = self.session.get(
                     self.AUTH1_URL,
@@ -283,9 +305,7 @@ class RadikoAuthenticator:
                 # Step 3: 認証を完了
                 auth2_headers = {
                     'X-Radiko-AuthToken': auth_token,
-                    'X-Radiko-Partialkey': partialkey,
-                    'X-Radiko-User': 'dummy_user',
-                    'X-Radiko-Device': 'pc'
+                    'X-Radiko-Partialkey': partialkey
                 }
                 
                 auth2_response = self.session.get(
@@ -459,6 +479,84 @@ class RadikoAuthenticator:
         if not self.is_authenticated():
             self.get_valid_auth_info()
         
+        return self.session
+    
+    def authenticate_timefree(self, force_refresh: bool = False) -> str:
+        """タイムフリー専用認証セッションを取得"""
+        # 既存のタイムフリーセッションが有効かチェック
+        if not force_refresh and self.auth_info and not self.auth_info.is_timefree_session_expired():
+            return self.auth_info.timefree_session
+        
+        try:
+            # 基本認証が有効であることを確認
+            if not self.is_authenticated():
+                self.auth_info = self.get_valid_auth_info()
+            
+            self.logger.info("タイムフリー認証開始（基本認証トークンを使用）")
+            
+            # タイムフリーアクセスは基本認証トークンで可能
+            # 追加のタイムフリー専用認証は不要（2025年仕様）
+            timefree_session = self.auth_info.auth_token
+            
+            # 認証情報を更新（1時間の有効期限）
+            self.auth_info.timefree_session = timefree_session
+            self.auth_info.timefree_expires_at = time.time() + 3600
+            
+            # セッションヘッダーにタイムフリートークンを追加
+            self.session.headers['X-Radiko-AuthToken'] = timefree_session
+            
+            self.logger.info("タイムフリー認証完了")
+            return timefree_session
+            
+        except Exception as e:
+            self.logger.error(f"タイムフリー認証エラー: {e}")
+            raise AuthenticationError(f"タイムフリー認証処理に失敗しました: {e}")
+    
+    def get_timefree_playlist_url(self, station_id: str, start_time: str, 
+                                 duration: int = 3600) -> str:
+        """タイムフリー用のプレイリストURLを生成"""
+        try:
+            # タイムフリーセッションが有効であることを確認
+            timefree_session = self.authenticate_timefree()
+            
+            # 2025年Radiko仕様に基づくタイムフリーURL生成
+            # YYYYMMDDHHMMSS形式でstart_timeを保持
+            from datetime import datetime, timedelta
+            
+            # start_timeが文字列の場合の処理
+            if isinstance(start_time, str):
+                try:
+                    # YYYYMMDDHHMMSS形式のまま使用
+                    start_time_str = start_time
+                    dt = datetime.strptime(start_time, '%Y%m%d%H%M%S')
+                    end_dt = dt + timedelta(seconds=duration)
+                    end_time_str = end_dt.strftime('%Y%m%d%H%M%S')
+                except ValueError:
+                    # タイムスタンプの場合は変換
+                    dt = datetime.fromtimestamp(int(start_time))
+                    start_time_str = dt.strftime('%Y%m%d%H%M%S')
+                    end_dt = dt + timedelta(seconds=duration)
+                    end_time_str = end_dt.strftime('%Y%m%d%H%M%S')
+            else:
+                # datetimeオブジェクトの場合
+                start_time_str = start_time.strftime('%Y%m%d%H%M%S')
+                end_dt = start_time + timedelta(seconds=duration)
+                end_time_str = end_dt.strftime('%Y%m%d%H%M%S')
+            
+            # Radiko タイムフリープレイリストURL（YYYYMMDDHHMMSS形式）
+            playlist_url = f"https://radiko.jp/v2/api/ts/playlist.m3u8?station_id={station_id}&ft={start_time_str}&to={end_time_str}"
+            
+            self.logger.info(f"タイムフリープレイリストURL生成: {station_id} ({start_time_str}-{end_time_str})")
+            return playlist_url
+            
+        except Exception as e:
+            self.logger.error(f"プレイリストURL生成エラー: {e}")
+            raise AuthenticationError(f"プレイリストURLの生成に失敗しました: {e}")
+    
+    def get_timefree_session(self) -> requests.Session:
+        """タイムフリー認証済みセッションを取得"""
+        # タイムフリーセッションが有効であることを確認
+        self.authenticate_timefree()
         return self.session
 
 

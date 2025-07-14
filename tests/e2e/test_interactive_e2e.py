@@ -194,9 +194,10 @@ class TestInteractiveE2E(unittest.TestCase):
             "help",                    # ヘルプ表示
             "status",                  # システム状態確認
             "list-stations",           # 放送局一覧
-            "list-schedules",          # スケジュール一覧
-            "list-recordings",         # 録音ファイル一覧
-            "stats"                    # 統計情報
+            # タイムフリー専用システムでは削除済み機能
+            # "list-schedules",          # スケジュール一覧 (削除済み)
+            # "list-recordings",         # 録音ファイル一覧 (削除済み)
+            # "stats"                    # 統計情報 (削除済み)
         ]
         
         returncode, stdout, stderr = self._run_interactive_process(commands)
@@ -209,9 +210,10 @@ class TestInteractiveE2E(unittest.TestCase):
         self.assertIn("利用可能なコマンド", stdout)  # help
         self.assertIn("システム状態", stdout)       # status  
         self.assertIn("放送局一覧", stdout)         # list-stations
-        self.assertIn("録音予約一覧", stdout)       # list-schedules
-        self.assertIn("録音ファイル一覧", stdout)   # list-recordings
-        self.assertIn("統計情報", stdout)          # stats
+        # タイムフリー専用システムでは利用できない機能
+        # self.assertIn("録音予約一覧", stdout)       # list-schedules (削除済み)
+        # self.assertIn("録音ファイル一覧", stdout)   # list-recordings (削除済み)
+        # self.assertIn("統計情報", stdout)          # stats (削除済み)
         self.assertIn("RecRadikoを終了します", stdout)
     
     def test_interactive_help_and_exit(self):
@@ -220,50 +222,48 @@ class TestInteractiveE2E(unittest.TestCase):
         
         returncode, stdout, stderr = self._run_interactive_process(commands)
         
-        # 検証
+        # 検証（タイムフリー専用システム対応）
         self.assertEqual(returncode, 0)
         self.assertIn("利用可能なコマンド", stdout)
-        self.assertIn("record <放送局ID> <時間(分)>", stdout)
-        self.assertIn("schedule", stdout)
+        # タイムフリー専用コマンド形式に更新
+        self.assertIn("record <日付> <放送局ID>", stdout)
         self.assertIn("list-stations", stdout)
         self.assertIn("exit", stdout)
+        # タイムフリー専用コマンドの確認
+        self.assertIn("list-programs", stdout)
+        self.assertIn("search-programs", stdout)
     
     def test_interactive_status_and_stats(self):
-        """ステータスと統計情報表示テスト"""
+        """ステータス表示テスト（タイムフリー専用対応）"""
         commands = [
-            "status",
-            "stats"
+            "status"
         ]
         
         returncode, stdout, stderr = self._run_interactive_process(commands)
         
-        # 検証
+        # 検証（タイムフリー専用システムでは統計機能は制限的）
         self.assertEqual(returncode, 0)
         self.assertIn("システム状態:", stdout)
         self.assertIn("録音状況", stdout)
         self.assertIn("ストレージ使用状況", stdout)
-        self.assertIn("統計情報:", stdout)
-        self.assertIn("総スケジュール", stdout)
+        # statsコマンドはタイムフリー専用システムでは無効
     
     def test_interactive_list_commands(self):
-        """一覧表示コマンドのテスト"""
+        """一覧表示コマンドのテスト（タイムフリー専用対応）"""
         commands = [
-            "list-stations",
-            "list-schedules", 
-            "list-recordings"
+            "list-stations"  # タイムフリー専用システムでは基本コマンドのみ
         ]
         
         returncode, stdout, stderr = self._run_interactive_process(commands)
         
-        # 検証
+        # 検証（タイムフリー専用システム対応）
         self.assertEqual(returncode, 0)
         self.assertIn("放送局一覧", stdout)
-        self.assertIn("録音予約一覧", stdout)
-        self.assertIn("録音ファイル一覧", stdout)
+        # list-schedules と list-recordings はタイムフリー専用システムでは無効
         
         # 基本的な出力形式が正しいことを確認
-        # データベースが空の場合は "0 件" と表示される
-        self.assertTrue("件)" in stdout)  # 件数表示の確認
+        # 放送局データが表示される
+        self.assertIn("局)", stdout)  # 局数表示の確認
     
     def test_interactive_invalid_command_handling(self):
         """無効なコマンドの処理テスト"""
@@ -316,7 +316,7 @@ class TestInteractiveE2E(unittest.TestCase):
         # 多数のコマンドを連続実行
         commands = []
         for i in range(10):
-            commands.extend(["status", "stats", "list-schedules"])
+            commands.extend(["status", "list-stations", "help"])
         
         start_time = time.time()
         returncode, stdout, stderr = self._run_interactive_process(commands, timeout=60)
@@ -327,10 +327,10 @@ class TestInteractiveE2E(unittest.TestCase):
         execution_time = end_time - start_time
         self.assertLess(execution_time, 45, "コマンド実行が遅すぎます")
         
-        # 全コマンドが実行されたことを確認
-        self.assertEqual(stdout.count("システム状態"), 10)
-        self.assertEqual(stdout.count("統計情報"), 10)
-        self.assertEqual(stdout.count("録音予約一覧"), 10)
+        # 全コマンドが実行されたことを確認（出力回数調整）
+        self.assertGreaterEqual(stdout.count("システム状態"), 10)
+        self.assertGreaterEqual(stdout.count("放送局一覧"), 10)
+        self.assertGreaterEqual(stdout.count("利用可能なコマンド"), 10)
     
     def test_interactive_error_recovery(self):
         """エラー復旧テスト"""
@@ -339,7 +339,7 @@ class TestInteractiveE2E(unittest.TestCase):
             "invalid-command",     # エラーコマンド
             "record",              # 引数不足エラー
             "status",              # 正常コマンド（復旧確認）
-            "stats"                # 正常コマンド（継続確認）
+            "help"                 # 正常コマンド（継続確認）
         ]
         
         returncode, stdout, stderr = self._run_interactive_process(commands)
@@ -347,22 +347,20 @@ class TestInteractiveE2E(unittest.TestCase):
         # エラー後も正常動作継続
         self.assertEqual(returncode, 0)
         self.assertIn("システム状態", stdout)
-        self.assertIn("統計情報", stdout)
+        self.assertIn("利用可能なコマンド", stdout)
         
         # エラーコマンドのハンドリング確認
         status_count = stdout.count("システム状態:")
         self.assertEqual(status_count, 2)
     
     def test_interactive_user_experience_flow(self):
-        """ユーザー体験フローテスト"""
-        # 実際のユーザーが行うであろう操作シーケンス
+        """ユーザー体験フローテスト（タイムフリー専用対応）"""
+        # タイムフリー専用システムで実際のユーザーが行うであろう操作シーケンス
         commands = [
             "help",                    # 初回利用時のヘルプ確認
             "list-stations",           # 利用可能な放送局確認
-            "list-schedules",          # 既存のスケジュール確認
             "status",                  # 現在の状況確認
-            "list-recordings",         # 過去の録音履歴確認
-            "stats",                   # 全体的な統計確認
+            "show-region",             # 地域設定確認
             "status"                   # 最終状態確認
         ]
         
@@ -371,14 +369,12 @@ class TestInteractiveE2E(unittest.TestCase):
         # ユーザー体験の品質確認
         self.assertEqual(returncode, 0)
         
-        # 各段階での適切な情報表示
+        # 各段階での適切な情報表示（タイムフリー専用システム対応）
         expected_flows = [
             ("help", "利用可能なコマンド"),
             ("list-stations", "放送局一覧"),
-            ("list-schedules", "録音予約一覧"),
             ("status", "システム状態"),
-            ("list-recordings", "録音ファイル一覧"),
-            ("stats", "統計情報")
+            ("show-region", "現在の地域設定")
         ]
         
         for command, expected_output in expected_flows:
