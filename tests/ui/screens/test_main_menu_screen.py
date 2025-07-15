@@ -44,6 +44,7 @@ class TestMainMenuScreen:
             "番組を検索する",
             "録音履歴を表示",
             "設定を変更",
+            "システム情報を表示",
             "ヘルプを表示",
             "終了"
         ]
@@ -89,6 +90,16 @@ class TestMainMenuScreen:
             
             mock_show_settings.assert_called_once()
             assert result == "settings"
+            
+    def test_handle_menu_selection_system_info(self, main_menu_screen, mock_ui_service):
+        """Test handling 'システム情報を表示' selection"""
+        main_menu_screen.ui_service = mock_ui_service
+        
+        with patch.object(main_menu_screen, 'show_system_info') as mock_show_system_info:
+            result = main_menu_screen.handle_menu_selection("システム情報を表示")
+            
+            mock_show_system_info.assert_called_once()
+            assert result == "system_info"
             
     def test_handle_menu_selection_help(self, main_menu_screen, mock_ui_service):
         """Test handling 'ヘルプを表示' selection"""
@@ -202,4 +213,10 @@ class TestMainMenuScreen:
         """Test showing settings"""
         # This method should prepare for navigation to settings
         main_menu_screen.show_settings()
+        # No specific assertions needed - just verify no exceptions
+        
+    def test_show_system_info(self, main_menu_screen):
+        """Test showing system info"""
+        # This method should prepare for navigation to system info
+        main_menu_screen.show_system_info()
         # No specific assertions needed - just verify no exceptions

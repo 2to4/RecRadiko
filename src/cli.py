@@ -1424,6 +1424,14 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
                         if settings_result:
                             print("✅ 設定が更新されました")
                             
+                    elif menu_result == "system_info":
+                        # システム情報画面
+                        from .ui.screens.system_info_screen import SystemInfoScreen
+                        system_info_screen = SystemInfoScreen()
+                        system_info_result = system_info_screen.run_system_info_workflow()
+                        if system_info_result:
+                            print("✅ システム情報を表示しました")
+                            
                     elif menu_result is None or menu_result == "exit":
                         # 終了
                         print("\n👋 RecRadikoを終了します。")

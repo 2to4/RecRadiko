@@ -38,6 +38,7 @@ class MainMenuScreen(ScreenBase):
             "番組を検索する",
             "録音履歴を表示", 
             "設定を変更",
+            "システム情報を表示",
             "ヘルプを表示",
             "終了"
         ]
@@ -97,6 +98,10 @@ class MainMenuScreen(ScreenBase):
         elif selection == "設定を変更":
             self.show_settings()
             return "settings"
+            
+        elif selection == "システム情報を表示":
+            self.show_system_info()
+            return "system_info"
             
         elif selection == "ヘルプを表示":
             self.ui_service.display_help()
@@ -161,6 +166,10 @@ class MainMenuScreen(ScreenBase):
         """Show settings (prepare for navigation to settings screen)"""
         print("\n設定画面に移動します...")
         
+    def show_system_info(self) -> None:
+        """Show system info (prepare for navigation to system info screen)"""
+        print("\nシステム情報画面に移動します...")
+        
     def confirm_exit(self) -> bool:
         """
         Confirm application exit
@@ -192,6 +201,8 @@ class MainMenuScreen(ScreenBase):
             return "これまでに録音したファイルの一覧を表示します"
         elif current_item == "設定を変更":
             return "地域設定、品質設定などを変更できます"
+        elif current_item == "システム情報を表示":
+            return "システム状態、録音統計、ログ情報を表示します"
         elif current_item == "ヘルプを表示":
             return "キーボード操作方法と使用手順を表示します"
         elif current_item == "終了":
