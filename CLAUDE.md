@@ -690,30 +690,33 @@ python -m pytest tests/test_auth.py -v
 
 プロジェクトは以下のモジュール構成になっています：
 
-### コアモジュール (`src/`)
-- `auth.py`: Radiko認証システム（基本・プレミアム認証、地域情報取得）
-- `streaming.py`: ストリーミング処理（HLS、M3U8、AACストリーム処理）
-- `recording.py`: 録音機能（FFmpegを使用した音声録音）
-- `program_info.py`: 番組情報管理（番組データ取得・検索）
-- `scheduler.py`: スケジューリング機能（録音スケジュール管理）
-- `file_manager.py`: ファイル管理（メタデータ、ストレージ管理）
-- `error_handler.py`: エラーハンドリング（自動復旧、通知システム）
-- `cli.py`: CLIインターフェース（コマンドライン操作）
-- `daemon.py`: デーモンモード（バックグラウンド実行）
-- `gui.py`: GUIインターフェース（今後実装予定）
+### タイムフリー専用コアモジュール (`src/`)
+- `timefree_recorder.py`: タイムフリー専用録音システム（セグメント並行ダウンロード・高速処理）
+- `program_history.py`: 過去番組表管理・検索（SQLiteキャッシュ・部分一致検索）
+- `auth.py`: タイムフリー認証システム（Radiko API 2025年仕様対応）
+- `streaming.py`: タイムフリー専用ストリーミング（M3U8プレイリスト処理）
+- `program_info.py`: 番組情報管理（XMLパース・データ変換）
+- `cli.py`: タイムフリー専用対話型CLI（list-programs、record、search-programs）
+- `utils/`: 共通ユーティリティ（LoggerMixin、ネットワーク、パス、日時）
+
+**🗑️ 削除されたモジュール（リファクタリング完了）**:
+- ❌ `recording.py`: 複雑な並行録音管理システム（849行削除）
+- ❌ `file_manager.py`: ファイル組織化・メタデータ管理（812行削除）
+- ❌ `scheduler.py`: 将来録音・ジョブ管理システム（1,399行削除）
+- ❌ `daemon.py`: バックグラウンド実行システム（1,347行削除）
+- ❌ `live_streaming_config.py`: ライブ録音設定（133行削除）
 
 ### エントリーポイント
-- `RecRadiko.py`: メインエントリーポイント
+- `RecRadiko.py`: タイムフリー専用メインエントリーポイント
 
-### テストスイート (`tests/`)
-- **単体テスト**: 各モジュールに対応した単体テストファイル（327個）
-- **統合テスト**: タイムフリー専用モジュール間統合テスト（12個）
-- **対話型テスト**: CLI・E2E対話型システムテスト（28個）
-- **E2Eテスト**: エンドツーエンドワークフローテスト（50個）
-- **実際APIテスト**: 実際のRadiko APIを使用するテスト（8個・100%成功）
-- pytestを使用したテストフレームワーク
-- モックを使用したネットワーク処理のテスト
-- 実際のAPI動作確認による実用性保証
+### タイムフリー専用テストスイート (`tests/`)
+- **タイムフリー専用テスト**: 139個（100%成功・警告ゼロ）
+  - TimeFreeRecorder（26個）: 並行ダウンロード・セグメント処理
+  - ProgramHistory（40個）: 番組表取得・検索・SQLiteキャッシュ
+  - CLI統合（22個）: 対話型コマンド・ユーザーインターフェース
+  - 認証・ファイル管理（51個）: タイムフリー認証・エラーハンドリング
+- pytestを使用したクリーンテスト環境
+- モックを使用したネットワーク処理テスト
 
 ## 設計方針
 
@@ -765,7 +768,7 @@ python -m pytest tests/test_auth.py -v
    - テストカバレッジの維持・向上
 
 **【理由】**:
-- 現在テスト成功率100%（433/433）の安定したコードベースを維持
+- 現在テスト成功率100%（139/139）の安定したコードベースを維持
 - 実際のAPI動作確認による実用性の完全保証
 - リグレッション（機能退化）の防止
 - コード品質の継続的な保証
@@ -775,6 +778,52 @@ python -m pytest tests/test_auth.py -v
 **【例外】**:
 - 例外は一切認めない
 - すべてのコード変更は必ずテスト成功が前提
+
+### 🌿 ブランチ運用ルールの厳格な遵守
+
+**【重要】ソースコード編集時の必須ブランチ運用:**
+
+1. **ソースコード編集は必ずdevelopmentブランチで実施**
+   ```bash
+   # 現在のブランチ確認
+   git branch
+   
+   # developmentブランチでない場合は移動
+   git checkout development
+   ```
+
+2. **mainブランチでの直接編集は禁止**
+   - mainブランチは本番用の安定版
+   - mainブランチでのソースコード変更は一切禁止
+
+3. **開発完了後のマージフロー**
+   ```bash
+   # 1. developmentブランチで開発・テスト完了
+   git checkout development
+   # コード編集・テスト実行
+   
+   # 2. developmentブランチでコミット
+   git add .
+   git commit -m "機能追加・修正内容"
+   
+   # 3. mainブランチにマージ
+   git checkout main
+   git merge development
+   ```
+
+4. **ブランチ確認の徹底**
+   - 編集開始前に必ず `git branch` で現在ブランチを確認
+   - developmentブランチでない場合は即座に移動
+
+**【理由】**:
+- mainブランチの安定性保証
+- 本番環境への意図しない変更防止
+- 開発フローの一貫性維持
+- レビュープロセスの品質向上
+
+**【例外】**:
+- ドキュメントのみの軽微な修正（CLAUDE.md、README.md等）でも開発ブランチを使用
+- 例外は一切認めない
 
 ## 一般的な開発タスク
 
@@ -799,70 +848,47 @@ python -m pytest tests/ -v
 
 #### 基本テスト実行
 ```bash
-# 単体テストの実行 (327テスト)
-python -m pytest tests/ -v
+# タイムフリー専用テスト実行（推奨）
+python -m pytest tests/ -v                    # 全体テスト（139個）
 
-# 統合テストの実行 (12テスト)
-python -m pytest tests/integration/ -v
+# コンポーネント別実行
+python -m pytest tests/test_timefree_recorder.py -v     # TimeFreeRecorder（26個）
+python -m pytest tests/test_program_history.py -v      # ProgramHistory（40個）
+python -m pytest tests/test_cli.py -v                  # CLI統合（22個）
 
-# E2Eテストの実行 (50テスト)
-python -m pytest tests/e2e/ -v
-
-# 実際のRadiko APIテストの実行 (16テスト)
-python -m pytest tests/e2e/test_real_api.py -v
-
-# 全テスト（単体+統合+E2E+実際API）の実行 (405テスト)
-python -m pytest tests/ tests/integration/ tests/e2e/ -v
+# 軽量システムのため統合・E2E・実際APIテストは除去済み
+# （40%コード削減により複雑なテストスイートは不要）
 ```
 
-#### 新機能テストケース実行
+#### タイムフリー専用機能テスト実行
 ```bash
-# 通知システムテスト (5テスト)
-python -m pytest tests/test_daemon.py -k "notification" -v
+# 認証システムテスト
+python -m pytest tests/test_auth.py -k "timefree" -v
 
-# 認証リトライテスト (4テスト)
-python -m pytest tests/test_auth.py -k "retry" -v
+# 番組履歴管理テスト
+python -m pytest tests/test_program_history.py -k "search" -v
 
-# CLI予約録音テスト (4テスト)
-python -m pytest tests/test_cli.py -k "schedule_command" -v
+# CLI対話型モードテスト
+python -m pytest tests/test_cli.py -k "interactive" -v
 
-# 統一ログ設定テスト（新規）
-python -m pytest tests/ -k "logging" -v
+# ユーティリティ機能テスト
+python -m pytest tests/ -k "utils" -v
 ```
 
-#### カテゴリ別E2Eテスト実行
+#### タイムフリー専用開発ワークフロー
 ```bash
-# 全E2Eテスト
-python -m pytest -m "e2e" -v
+# 基本開発サイクル（必須）
+python -m pytest tests/ -v                    # タイムフリー専用テスト（139個）
 
-# 実際のRadiko APIテスト（R1-R10）
-python -m pytest -m "real_api" -v
+# 重要変更時（推奨）  
+python -m pytest tests/ -v --cov=src          # カバレッジ付きテスト実行
 
-# API契約テスト（C1-C3）
-python -m pytest -m "contract" -v
-
-# ユーザージャーニーテスト（A1-A4）
-python -m pytest -m "user_journey" -v
-
-# システム稼働テスト（B1-B3）
-python -m pytest -m "system_operation" -v
-
-# 障害復旧テスト（C1-C3）
-python -m pytest -m "failure_recovery" -v
-
-# パフォーマンステスト（D1-D3）
-python -m pytest -m "performance" -v
-
-# 高速テストのみ
-python -m pytest -m "not slow" -v
+# 最重要変更時（リファクタリング等）
+python -m pytest tests/ -v -x                 # 最初のエラーで停止（高速フィードバック）
 ```
 
 #### 高度なテスト実行オプション
 ```bash
-# CI環境での実際のAPIテスト無効化
-export SKIP_REAL_API_TESTS=1
-python -m pytest tests/e2e/test_real_api.py -v
-
 # カバレッジ付きテスト
 python -m pytest tests/ --cov=src --cov-report=html
 
@@ -872,15 +898,10 @@ python -m pytest tests/ -v -s --tb=short
 # 並列テスト実行（高速化）
 python -m pytest tests/ -n auto
 
-# 特定のE2Eテストスイート
-python -m pytest tests/e2e/test_user_journey.py -v
-python -m pytest tests/e2e/test_system_operation.py -v
-python -m pytest tests/e2e/test_failure_recovery.py -v
-python -m pytest tests/e2e/test_performance.py -v
-python -m pytest tests/e2e/test_real_api.py -v
-
-# 専用スクリプトでの実際のAPIテスト実行
-./tests/e2e/scripts/run_real_api_tests.sh
+# 特定コンポーネントテスト
+python -m pytest tests/test_timefree_recorder.py -v
+python -m pytest tests/test_program_history.py -v
+python -m pytest tests/test_cli.py -v
 ```
 
 #### テスト環境の制御
@@ -895,45 +916,41 @@ PYTEST_CURRENT_TEST=test python -c "from src.logging_config import is_test_mode,
 RECRADIKO_CONSOLE_OUTPUT=true python RecRadiko.py --help
 ```
 
-### 開発時の注意点
-- **🚨 最重要**: ソースコード変更時は必ず単体テスト実行・成功確認
-- **重要な変更時**: 結合テスト・E2Eテストも実行してモジュール間統合・エンドツーエンドを確認
-- **実際のAPI変更時**: 実際のRadiko APIテストも実行して実用性確認
-- **新機能追加時**: 対応する単体テスト・結合テスト・E2Eテスト・実際APIテストも作成（13個追加実績）
-- 外部API呼び出しはモックを使用してテスト、必要に応じて実際のAPIテストも作成
-- **テストケース追加例**: 通知システム5個、認証リトライ4個、CLI修正4個のテストケースを追加済み
+### タイムフリー専用システム開発時の注意点
+- **🚨 最重要**: ソースコード変更時は必ずdevelopmentブランチでテスト実行・成功確認
+- **ブランチ確認**: 編集前に `git branch` で現在ブランチを確認
+- **テスト実行**: タイムフリー専用テスト（139個）で機能品質確認
+- **新機能追加時**: 対応するテストケースを必ず作成
+- **外部API呼び出し**: モックを使用してテスト
 - **ログ設定**: 統一ログ設定により、テスト時のみコンソール出力、通常使用時はファイルログのみ
-- 設定変更時はCLAUDE.mdも更新
-- コードスタイルはPEP8に準拠
+- **設定変更時**: CLAUDE.mdも更新
+- **コードスタイル**: PEP8に準拠
 - **応答とドキュメントの作成は日本語で行う**
 
-### 開発ワークフロー（必須）
+### タイムフリー専用開発ワークフロー（必須）
 ```bash
-# 1. 変更前のテスト確認（単体+結合+E2E+実際API）
-python -m pytest tests/ tests/integration/ tests/e2e/ -v
+# 1. 開発ブランチ確認・移動
+git branch                        # 現在ブランチ確認
+git checkout development          # developmentブランチに移動
 
-# 2. コード変更・実装
+# 2. 変更前のテスト確認
+python -m pytest tests/ -v       # タイムフリー専用テスト（139個）
 
-# 3. 変更後のテスト実行（必須）
-# 小規模変更時
-python -m pytest tests/ -v
+# 3. コード変更・実装
+# （developmentブランチでソースコード編集）
 
-# 重要な変更時（モジュール間のインターフェース変更等）
-python -m pytest tests/ tests/integration/ -v
+# 4. 変更後のテスト実行（必須）
+python -m pytest tests/ -v       # 全テスト実行
 
-# 最重要な変更時（アーキテクチャ変更・リファクタリング等）
-python -m pytest tests/ tests/integration/ tests/e2e/ -v
+# 5. テスト成功確認後にコミット可能
+# ✅ タイムフリー専用テスト: 139/139 (100%)
+# ✅ 警告ゼロのクリーンテスト環境
 
-# 実際のAPI変更時（認証・ストリーミング・録音関連の変更）
-python -m pytest tests/e2e/test_real_api.py -v
-
-# 4. テスト成功確認後にコミット可能
-# ✅ 単体テスト: 327/327 (100%)
-# ✅ 統合テスト: 12/12 (100%)
-# ✅ 対話型テスト: 28/28 (100%)
-# ✅ E2Eテスト: 50/50 (100%)
-# ✅ 実際APIテスト: 8/8 (100%)
-# ✅ 全体テスト: 425/425 (100%)
+# 6. コミット・マージフロー
+git add .
+git commit -m "機能追加・修正内容"
+git checkout main
+git merge development
 ```
 
 ## 依存関係
