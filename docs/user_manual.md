@@ -91,16 +91,26 @@ python RecRadiko.py --help
     "default_format": "mp3",
     "default_bitrate": 192,
     "concurrent_segments": 8,
-    "enable_metadata": true
+    "enable_metadata": true,
+    "segment_timeout": 30,
+    "retry_attempts": 3
   },
   "timefree": {
     "cache_duration_hours": 24,
     "enable_program_search": true,
-    "max_search_results": 100
+    "max_search_results": 100,
+    "database_path": "./timefree.db"
+  },
+  "ui": {
+    "keyboard_navigation_enabled": true,
+    "show_progress_bar": true,
+    "auto_return_to_menu": true
   },
   "auth": {
     "username": "your_radiko_username",
-    "password": "your_radiko_password"
+    "password": "your_radiko_password",
+    "auto_authenticate": true,
+    "token_cache_enabled": true
   }
 }
 ```
@@ -123,16 +133,27 @@ python RecRadiko.py --help
 
 ## 🎯 基本的な使用方法
 
-### 対話型モードの起動
+### 1. 対話型CLIモード（推奨）
 
 ```bash
 python RecRadiko.py
 ```
 
-対話型プロンプトが表示されます：
+対話型プロンプトが表示され、以下のコマンドが利用可能です：
 ```
 RecRadiko> 
 ```
+
+### 2. キーボードナビゲーションUI（新機能）
+
+```bash
+python RecRadiko.py --ui
+```
+
+上下キーで選択、Enterで決定する直感的なUIで録音できます：
+- **Station Select** → **Date Select** → **Program Select** → **Recording**
+- 3段階の簡単ナビゲーション
+- キーボードショートカット対応（ESC: 戻る、Q: 終了）
 
 ### タイムフリー専用コマンド
 
@@ -220,12 +241,53 @@ RecRadiko> show-region
 # 都道府県一覧表示
 RecRadiko> list-prefectures
 
+# システム状態確認
+RecRadiko> status
+
+# キーボードUIモードに切り替え
+RecRadiko> ui-mode
+
 # ヘルプ表示
 RecRadiko> help
 
 # 終了
 RecRadiko> exit
+# または
+RecRadiko> quit
 ```
+
+### 3. キーボードナビゲーションUIの使用方法
+
+#### UIモードの起動
+```bash
+# 起動時にUIモードを指定
+python RecRadiko.py --ui
+
+# または対話型モードからUIモードに切り替え
+RecRadiko> ui-mode
+```
+
+#### キーボード操作
+- **↑/↓キー**: リスト項目の移動（循環選択対応）
+- **Enterキー**: 選択確定・実行
+- **Escキー**: 前画面に戻る・キャンセル
+- **Page↑/↓**: 長いリストのページ送り（10項目単位）
+- **Qキー**: 終了確認
+- **Rキー**: 地域変更（StationSelectで使用）
+- **Sキー**: 検索機能（ProgramSelectで使用）
+
+#### 録音ワークフロー
+1. **メインメニュー**: "Start Recording"を選択
+2. **放送局選択**: 希望の放送局を上下キーで選択してEnter
+3. **日付選択**: 録音したい日付を選択（過去1週間）
+4. **番組選択**: 番組リストから録音したい番組を選択
+5. **録音実行**: 自動的に録音が開始され、進捗が表示される
+
+#### UIの特徴
+- **視覚的フィードバック**: 選択項目が「→」マークと反転表示でハイライト
+- **自動ページング**: 長いリストは10項目ずつ表示
+- **エラーハンドリング**: 問題発生時は自動的にメニューに戻る
+- **プログレス表示**: 録音中はリアルタイムで進捗を表示
 
 ## 🎛️ 高度な設定
 

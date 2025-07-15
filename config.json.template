@@ -1,43 +1,49 @@
 {
-  "area_id": "JP13",
+  "prefecture": "東京",
   "output_dir": "./recordings",
-  "max_concurrent_recordings": 4,
-  "auto_cleanup_enabled": true,
-  "retention_days": 30,
-  "min_free_space_gb": 10.0,
-  "notification_enabled": true,
-  "log_level": "INFO",
-  "log_file": "recradiko.log",
-  "max_log_size_mb": 100,
-  "daemon": {
-    "health_check_interval": 300,
-    "monitoring_enabled": true,
-    "pid_file": "./daemon.pid"
-  },
   "recording": {
     "default_format": "mp3",
     "default_bitrate": 192,
+    "concurrent_segments": 8,
+    "enable_metadata": true,
+    "segment_timeout": 30,
+    "retry_attempts": 3,
     "auto_metadata_enabled": true,
-    "tag_audio_files": true,
-    "max_concurrent_jobs": 4,
-    "segment_timeout": 60,
-    "retry_attempts": 3
+    "tag_audio_files": true
   },
-  "error_handler": {
-    "max_error_records": 1000,
-    "notification_enabled": true,
-    "email_config": {
-      "smtp_server": "smtp.gmail.com",
-      "smtp_port": 587,
-      "username": "your_email@gmail.com",
-      "password": "your_app_password",
-      "to_emails": ["admin@example.com"]
-    }
+  "timefree": {
+    "cache_duration_hours": 24,
+    "enable_program_search": true,
+    "max_search_results": 100,
+    "database_path": "./timefree.db"
+  },
+  "ui": {
+    "keyboard_navigation_enabled": true,
+    "show_progress_bar": true,
+    "auto_return_to_menu": true,
+    "page_size": 10,
+    "enable_shortcuts": true
   },
   "auth": {
     "username": "",
     "password": "",
     "auto_authenticate": true,
     "token_cache_enabled": true
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_file": "recradiko.log",
+    "max_log_size_mb": 100,
+    "console_output": false
+  },
+  "notification": {
+    "enabled": true,
+    "use_system_notification": true
+  },
+  "file_management": {
+    "auto_cleanup_enabled": false,
+    "retention_days": 30,
+    "min_free_space_gb": 10.0,
+    "output_naming": "date_station_title"
   }
 }
