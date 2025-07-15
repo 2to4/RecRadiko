@@ -18,8 +18,8 @@ from src.ui.screen_base import ScreenBase
 from src.ui.services.ui_service import UIService
 
 
-class TestScreenImplementation(ScreenBase):
-    """Test implementation of ScreenBase for testing"""
+class MockScreenImplementation(ScreenBase):
+    """Mock implementation of ScreenBase for testing"""
     
     def __init__(self):
         super().__init__()
@@ -41,7 +41,7 @@ class TestScreenBase:
     @pytest.fixture
     def screen(self):
         """Create test screen instance"""
-        return TestScreenImplementation()
+        return MockScreenImplementation()
         
     @pytest.fixture
     def mock_ui_service(self):

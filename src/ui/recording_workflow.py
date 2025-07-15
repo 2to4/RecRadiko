@@ -265,6 +265,10 @@ class RecordingWorkflow:
         self.selected_program = None
         self.logger.debug("Selection state reset")
         
+    def reset_workflow_state(self) -> None:
+        """Reset workflow state (alias for reset_selection)"""
+        self.reset_selection()
+        
     def get_selection_summary(self) -> str:
         """
         Get summary of current selections
@@ -294,6 +298,15 @@ class RecordingWorkflow:
         """
         return all([self.selected_station, self.selected_date, self.selected_program])
         
+    def is_workflow_complete(self) -> bool:
+        """
+        Check if workflow is complete (alias for has_complete_selection)
+        
+        Returns:
+            True if workflow is complete, False otherwise
+        """
+        return self.has_complete_selection()
+        
     def get_recording_info(self) -> Optional[Dict[str, Any]]:
         """
         Get recording information dictionary
@@ -309,6 +322,19 @@ class RecordingWorkflow:
             "date": self.selected_date,
             "program": self.selected_program,
             "summary": self.get_selection_summary()
+        }
+        
+    def get_workflow_state(self) -> Dict[str, Any]:
+        """
+        Get workflow state dictionary
+        
+        Returns:
+            Dictionary containing workflow state
+        """
+        return {
+            "station": self.selected_station,
+            "date": self.selected_date,
+            "program": self.selected_program
         }
         
     def validate_selections(self) -> bool:

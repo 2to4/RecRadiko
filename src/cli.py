@@ -47,7 +47,7 @@ class RecRadikoCLI(LoggerMixin):
     
     # 対話型モードで利用可能なコマンド一覧（タイムフリー専用）
     INTERACTIVE_COMMANDS = [
-        'list-programs', 'record', 'record-id', 'search-programs',
+        'list-programs', 'record', 'record-id', 'search-programs', 'ui-mode',
         'list-stations', 'show-region', 'list-prefectures', 
         'status', 'help', 'exit', 'quit'
     ]
@@ -1088,6 +1088,7 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
   list-stations                                        - 放送局一覧を表示
   show-region                                          - 現在の地域設定を表示
   list-prefectures                                     - 全都道府県一覧を表示
+  ui-mode                                              - キーボードナビゲーションUIモードに切り替え
   status                                               - システム状態を表示
   help                                                 - このヘルプを表示
   exit                                                 - プログラムを終了
@@ -1228,6 +1229,9 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
             
             elif command == 'list-prefectures':
                 return self._cmd_list_prefectures(args)
+            
+            elif command == 'ui-mode':
+                return self._cmd_ui_mode(args)
             
             elif command == 'status':
                 return self._cmd_status(args)
@@ -1376,6 +1380,43 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
             
         except Exception as e:
             print(f"エラー: {e}")
+            return 1
+            
+    def _cmd_ui_mode(self, args):
+        """UIモードに切り替え"""
+        try:
+            print("🎛️  キーボードナビゲーションUI モードを開始します...")
+            print("終了するには Ctrl+C を押してください。")
+            print("")
+            
+            # RecordingWorkflowのインポート
+            from .ui.recording_workflow import RecordingWorkflow
+            
+            # RecordingWorkflowの初期化と実行
+            with RecordingWorkflow() as workflow:
+                # メインメニュー表示
+                print("📻 RecRadiko キーボードナビゲーション UI")
+                print("=" * 50)
+                
+                # 録音ワークフローの開始
+                result = workflow.start_recording_workflow()
+                
+                if result:
+                    print("✅ 録音ワークフローが完了しました")
+                    return 0
+                else:
+                    print("❌ 録音ワークフローがキャンセルされました")
+                    return 1
+                    
+        except KeyboardInterrupt:
+            print("\n\n🛑 UIモードを終了します")
+            return 0
+        except ImportError as e:
+            print(f"❌ UIモジュールのインポートに失敗しました: {e}")
+            print("キーボードナビゲーションUIは利用できません。")
+            return 1
+        except Exception as e:
+            print(f"❌ UIモードでエラーが発生しました: {e}")
             return 1
 
 

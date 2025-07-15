@@ -6,7 +6,9 @@
       "Bash(git checkout:*)",
       "Bash(git merge:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(python:*)"
     ],
     "deny": [
       "Bash(rm -rf /)"

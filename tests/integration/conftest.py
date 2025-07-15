@@ -19,8 +19,44 @@ from pathlib import Path
 # RecRadikoモジュールのインポート
 from src.auth import AuthInfo
 from src.program_info import Program
-from src.recording import RecordingJob, RecordingStatus
-from src.file_manager import FileMetadata, StorageInfo
+
+# 削除されたクラスの代替定義（テスト用）
+class RecordingStatus:
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class RecordingJob:
+    def __init__(self, id, station_id, program_title, start_time, end_time, output_path, status):
+        self.id = id
+        self.station_id = station_id
+        self.program_title = program_title
+        self.start_time = start_time
+        self.end_time = end_time
+        self.output_path = output_path
+        self.status = status
+
+class FileMetadata:
+    def __init__(self, file_path, program_title, station_id, recorded_at, start_time, end_time, duration_seconds, file_size, format, bitrate):
+        self.file_path = file_path
+        self.program_title = program_title
+        self.station_id = station_id
+        self.recorded_at = recorded_at
+        self.start_time = start_time
+        self.end_time = end_time
+        self.duration_seconds = duration_seconds
+        self.file_size = file_size
+        self.format = format
+        self.bitrate = bitrate
+
+class StorageInfo:
+    def __init__(self, total_space, used_space, free_space, recording_files_size, file_count):
+        self.total_space = total_space
+        self.used_space = used_space
+        self.free_space = free_space
+        self.recording_files_size = recording_files_size
+        self.file_count = file_count
 
 
 @pytest.fixture(scope="session")
