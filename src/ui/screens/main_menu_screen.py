@@ -35,6 +35,7 @@ class MainMenuScreen(ScreenBase):
         self.set_title("RecRadiko - メインメニュー")
         self.menu_options = [
             "番組を録音する",
+            "番組を検索する",
             "録音履歴を表示", 
             "設定を変更",
             "ヘルプを表示",
@@ -84,6 +85,10 @@ class MainMenuScreen(ScreenBase):
         if selection == "番組を録音する":
             self.start_recording_flow()
             return "station_select"
+            
+        elif selection == "番組を検索する":
+            self.logger.info("Navigating to search screen")
+            return "search"
             
         elif selection == "録音履歴を表示":
             self.show_recording_history()

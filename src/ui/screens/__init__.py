@@ -11,5 +11,6 @@ from .main_menu_screen import MainMenuScreen
 from .station_select_screen import StationSelectScreen
 from .date_select_screen import DateSelectScreen
 from .program_select_screen import ProgramSelectScreen
+from .search_screen import SearchScreen
 
-__all__ = ['MainMenuScreen', 'StationSelectScreen', 'DateSelectScreen', 'ProgramSelectScreen']
+__all__ = ['MainMenuScreen', 'StationSelectScreen', 'DateSelectScreen', 'ProgramSelectScreen', 'SearchScreen']

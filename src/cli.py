@@ -1391,6 +1391,7 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
             
             # RecordingWorkflowのインポート
             from .ui.recording_workflow import RecordingWorkflow
+            from .ui.screens.main_menu_screen import MainMenuScreen
             
             # RecordingWorkflowの初期化と実行
             with RecordingWorkflow() as workflow:
@@ -1398,15 +1399,32 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
                 print("📻 RecRadiko キーボードナビゲーション UI")
                 print("=" * 50)
                 
-                # 録音ワークフローの開始（async対応）
-                result = workflow.run_sync()
-                
-                if result:
-                    print("✅ 録音ワークフローが完了しました")
-                    return 0
-                else:
-                    print("❌ 録音ワークフローがキャンセルされました")
-                    return 1
+                # メインメニューループ
+                while True:
+                    main_menu = MainMenuScreen()
+                    menu_result = main_menu.run_main_menu_loop()
+                    
+                    if menu_result == "station_select":
+                        # 通常の録音ワークフロー
+                        result = workflow.run_sync()
+                        if result:
+                            print("✅ 録音ワークフローが完了しました")
+                            
+                    elif menu_result == "search":
+                        # 検索ワークフロー
+                        result = workflow.run_sync(mode="search")
+                        if result:
+                            print("✅ 検索からの録音が完了しました")
+                            
+                    elif menu_result is None or menu_result == "exit":
+                        # 終了
+                        print("\n👋 RecRadikoを終了します。")
+                        break
+                    
+                    # ワークフロー状態をリセット
+                    workflow.reset_workflow_state()
+                    
+            return 0
                     
         except KeyboardInterrupt:
             print("\n\n🛑 UIモードを終了します")

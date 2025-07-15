@@ -41,6 +41,7 @@ class TestMainMenuScreen:
         """Test main menu options are correctly defined"""
         expected_options = [
             "番組を録音する",
+            "番組を検索する",
             "録音履歴を表示",
             "設定を変更",
             "ヘルプを表示",

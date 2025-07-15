@@ -63,6 +63,53 @@ class RecordingWorkflow:
         self.menu_manager.register_screen("date_select", self.date_select_screen)
         self.menu_manager.register_screen("program_select", self.program_select_screen)
         
+    async def start_search_workflow(self) -> bool:
+        """
+        Start program search workflow
+        
+        Returns:
+            True if recording was successful, False otherwise
+        """
+        try:
+            self.logger.info("Starting search workflow")
+            
+            # Import SearchScreen here to avoid circular imports
+            from src.ui.screens.search_screen import SearchScreen
+            
+            # Initialize search screen
+            search_screen = SearchScreen()
+            
+            # Run search workflow
+            selected_program = search_screen.run_search_workflow()
+            
+            if not selected_program:
+                self.logger.info("Search workflow cancelled")
+                return False
+            
+            # Convert ProgramInfo to dictionary format
+            self.selected_program = {
+                'title': selected_program.title,
+                'performers': selected_program.performers,
+                'program_id': selected_program.program_id,
+                'station_id': selected_program.station_id,
+                'station_name': selected_program.station_name,
+                'start_time': selected_program.start_time,
+                'end_time': selected_program.end_time,
+                'duration_minutes': selected_program.duration_minutes
+            }
+            
+            # Set other required selections
+            self.selected_station = selected_program.station_id
+            self.selected_date = selected_program.start_time.date().strftime('%Y-%m-%d')
+            
+            # Execute recording
+            return await self._execute_recording()
+            
+        except Exception as e:
+            self.logger.error(f"Search workflow error: {e}")
+            self._display_error_summary("search", str(e))
+            return False
+            
     async def start_recording_workflow(self) -> bool:
         """
         Start complete recording workflow
@@ -673,10 +720,13 @@ class RecordingWorkflow:
         """Context manager exit"""
         self.cleanup()
         
-    def run_sync(self) -> bool:
+    def run_sync(self, mode: str = "normal") -> bool:
         """
         Run workflow synchronously using asyncio
         
+        Args:
+            mode: Workflow mode ("normal" or "search")
+            
         Returns:
             True if recording completed successfully, False otherwise
         """
@@ -690,8 +740,11 @@ class RecordingWorkflow:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            # Run async workflow
-            return loop.run_until_complete(self.start_recording_workflow())
+            # Run async workflow based on mode
+            if mode == "search":
+                return loop.run_until_complete(self.start_search_workflow())
+            else:
+                return loop.run_until_complete(self.start_recording_workflow())
             
         except Exception as e:
             self.logger.error(f"Sync workflow execution error: {e}")
