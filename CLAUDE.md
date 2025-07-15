@@ -237,6 +237,89 @@ RecRadiko> exit
 - **メタデータ対応**: ID3タグ自動埋め込み
 - **検索機能**: 番組名・出演者での部分一致検索
 
+### 🎯 **最優先タスク: キーボードナビゲーション対応UI実装**
+
+#### 現在の実装状況
+**設計完了**: UI仕様書・概要設計書・詳細設計書・テスト仕様書の完成
+- [✅] UI_SPECIFICATION.md: 上下キー選択・エンター確定の仕様策定
+- [✅] ARCHITECTURE_DESIGN.md: MenuManager・ScreenBase・UIServiceアーキテクチャ設計
+- [✅] DETAILED_DESIGN.md: キーボード入力処理・ANSI対応・ハイライト表示設計
+- [✅] TEST_SPECIFICATION.md: 単体・統合・E2Eテスト157個のテストケース設計
+
+#### 実装計画 (4週間)
+
+**Phase 1: 基盤実装 (Week 1)**（✅ **完全達成**）
+- [✅] Day 1-2: `src/ui/input/keyboard_handler.py` - クロスプラットフォームキー入力処理
+  - **実装完了**: KeyboardHandler（11テスト成功、Windows/macOS/Linux対応）
+  - **テスト項目**: キーマッピング・プラットフォーム分岐・特殊キー検出
+  - **技術成果**: ANSIエスケープシーケンス・msvcrt/termios統合
+- [✅] Day 3-4: `src/ui/services/ui_service.py` - キーボードナビゲーション・ハイライト表示
+  - **実装完了**: UIService（15テスト成功、循環選択・視覚フィードバック）
+  - **テスト項目**: メニュー操作・ハイライト表示・ユーザー入力処理
+  - **技術成果**: → マーク表示・ANSI反転・画面クリア機能
+- [✅] Day 5-7: `src/ui/screen_base.py` + `menu_manager.py` - 画面基底・ナビゲーション制御
+  - **実装完了**: ScreenBase（18テスト）+ MenuManager（15テスト成功）
+  - **テスト項目**: 抽象基底クラス・画面ライフサイクル・スタック管理
+  - **技術成果**: テンプレートメソッドパターン・戻るナビゲーション・状態管理
+
+**📊 Phase 1 実装成果統計**:
+- **テスト成功率**: 59/59 (100%) - KeyboardHandler(11) + UIService(15) + ScreenBase(18) + MenuManager(15)
+- **TDDサイクル**: 完全遵守（Red→Green→Refactor）
+- **プラットフォーム**: Windows/macOS/Linux完全対応
+- **アーキテクチャ**: 抽象化・継承・依存性注入による高品質設計
+
+**📊 Phase 2 実装成果統計（完全達成）**:
+- **テスト成功率**: 144/144 (100%) - 基盤(59) + MainMenuScreen(17) + StationSelectScreen(18) + DateSelectScreen(23) + ProgramSelectScreen(27)
+- **スクリーン完成**: MainMenu + StationSelect + DateSelect + ProgramSelect（4/4スクリーン完了）
+- **統合機能**: RegionMapper・ProgramInfoManager・ProgramHistoryManager完全連携
+- **実用機能**: 47都道府県対応・地域変更・放送局選択・日付選択・番組選択・ページング機能・ショートカットキー
+- **3段階録音フロー**: Station→Date→Program選択完全実現
+
+**Phase 2: Screen実装 (Week 2)**（✅ **完全達成**）
+- [✅] Day 8-10: `src/ui/screen_base.py` - キーボード対応基底クラス（Phase 1で前倒し完了）
+- [✅] Day 11-12: MainMenu・StationSelect・DateSelectScreen実装
+  - [✅] **MainMenuScreen完成**: メインメニュー・録音履歴・設定・ヘルプ・終了確認（17テスト成功）
+  - [✅] **StationSelectScreen完成**: 地域別放送局選択・RegionMapper統合・ProgramInfoManager連携（18テスト成功）
+  - [✅] **DateSelectScreen完成**: 日付選択・タイムフリー期間対応・相対日付表示（23テスト成功）
+- [✅] Day 13-14: ProgramSelectScreen・ページング機能実装
+  - [✅] **ProgramSelectScreen完成**: 番組選択・ページング・ProgramHistoryManager統合（27テスト成功）
+
+**Phase 3: 統合・最適化 (Week 3)**
+- Day 15-17: 統合テスト・デバッグ・パフォーマンス調整
+- Day 18-19: UI改善・ユーザビリティ向上・アクセシビリティ対応
+- Day 20-21: ドキュメント更新・リリース準備
+
+**Phase 4: 追加機能・拡張 (Week 4)**
+- Day 22-24: 検索・設定・システム情報画面キーボード対応
+- Day 25-26: パフォーマンス最適化・メモリ効率化
+- Day 27-28: 最終品質保証・リリース判定
+
+#### 技術仕様
+**キーボード操作**:
+- ↑/↓キー: リスト項目移動（循環選択対応）
+- Enterキー: 選択確定・実行
+- Escキー: 前画面に戻る・キャンセル
+- Page↑/↓: 長いリストのページ送り（10項目単位）
+- ショートカットキー: R（地域変更）、S（検索）、Q（終了）
+
+**視覚的フィードバック**:
+- → マークによる選択項目表示
+- ANSI反転表示によるハイライト
+- グレーアウトによる無効項目表示
+- 区切り線による論理グループ分離
+
+**既存モジュール統合仕様**:
+- **MenuManager**: 既存CLI.pyと共存、段階的移行
+- **UIService**: 既存TimeFreeRecorder・ProgramHistoryを継続使用
+- **Screen実装**: 既存認証・地域設定システムをそのまま活用
+- **設定ファイル**: 既存JSON設定との100%互換性維持
+
+#### 品質基準
+- **テストカバレッジ**: 95%以上
+- **キー応答時間**: < 50ms
+- **画面遷移時間**: < 100ms
+- **既存機能互換性**: 100%維持
+
 ### 🚨 **開発ルール（TDD遵守）**
 
 #### 必須開発手順
@@ -244,6 +327,13 @@ RecRadiko> exit
 2. **新機能実装時**: 対応するテストケースを必ず作成
 3. **コード変更後**: 必ずテスト実行・成功確認
 4. **テスト失敗時**: 新しいコードはコミット・使用禁止
+
+#### キーボードナビゲーション実装専用TDDワークフロー
+1. **テスト先行**: `tests/ui/` 以下にテストケース作成
+2. **Red**: テスト実行・失敗確認 `pytest tests/ui/ -v`
+3. **Green**: 最小実装でテスト成功 `pytest tests/ui/ -v`
+4. **Refactor**: コード改善・既存テスト維持
+5. **統合確認**: 既存139テスト + 新UIテスト全成功確認
 
 #### テスト戦略
 - **単体テスト**: 各モジュールの機能テスト
