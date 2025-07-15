@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from src.ui.screen_base import ScreenBase
 from src.ui.services.ui_service import UIService
 from src.utils.base import LoggerMixin
+from src.ui.performance_optimizer import optimize_performance, cache_result
 
 
 class SystemChecker(LoggerMixin):
@@ -33,6 +34,7 @@ class SystemChecker(LoggerMixin):
         super().__init__()
         self.config_dir = Path(config_dir).expanduser()
     
+    @cache_result("system_status", ttl=60)  # Cache for 1 minute
     def get_system_status(self) -> Dict[str, Any]:
         """Get comprehensive system status"""
         return {
@@ -419,6 +421,7 @@ class RecordingStatsManager(LoggerMixin):
             self.logger.error(f"Error getting recent recordings: {e}")
             return []
     
+    @optimize_performance("get_performance_metrics")
     def get_performance_metrics(self) -> Dict[str, Any]:
         """Get performance metrics"""
         try:

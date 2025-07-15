@@ -14,6 +14,7 @@ Based on DETAILED_DESIGN.md specifications:
 import logging
 from typing import List, Optional, Any
 from src.ui.input.keyboard_handler import KeyboardHandler
+from src.ui.performance_optimizer import optimize_performance, cache_result
 
 
 class UIService:
@@ -85,6 +86,7 @@ class UIService:
         """Clear terminal screen using ANSI escape sequences"""
         print('\033[2J\033[H', end='')  # Clear screen and move cursor to top
         
+    @optimize_performance("ui_get_user_selection")
     def get_user_selection(self) -> Optional[Any]:
         """
         Get user selection using keyboard navigation

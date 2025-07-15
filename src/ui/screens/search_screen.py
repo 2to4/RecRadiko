@@ -65,6 +65,7 @@ class SearchScreen(ScreenBase):
         
         # Set menu items for search methods
         self.ui_service.set_menu_items(self.search_methods)
+        self.ui_service.display_menu_with_highlight()
         
         # Display additional options
         print("\n[99] メインメニューに戻る")

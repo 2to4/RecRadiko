@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Any
 import logging
 from src.ui.services.ui_service import UIService
+from src.ui.performance_optimizer import optimize_performance, performance_optimizer
 
 
 class ScreenBase(ABC):
@@ -55,6 +56,7 @@ class ScreenBase(ABC):
         self.cleanup()
         self.logger.debug(f"Screen '{self.title}' deactivated")
         
+    @optimize_performance("screen_show")
     def show(self) -> None:
         """Display the screen (template method)"""
         self.ui_service.clear_screen()
