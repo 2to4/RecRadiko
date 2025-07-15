@@ -35,10 +35,7 @@ from src.cli import RecRadikoCLI
 from src.auth import RadikoAuthenticator, AuthInfo
 from src.program_info import ProgramInfoManager, Program, Station
 from src.streaming import StreamingManager, StreamInfo, StreamSegment
-from src.recording import RecordingManager, RecordingJob, RecordingStatus
-from src.file_manager import FileManager, FileMetadata
-from src.scheduler import RecordingScheduler, RecordingSchedule, RepeatPattern, ScheduleStatus
-from src.daemon import DaemonManager, DaemonStatus
+# 削除されたモジュール: RecordingManager, FileManager, RecordingScheduler, DaemonManager (タイムフリー専用システム)
 from src.error_handler import ErrorHandler
 
 

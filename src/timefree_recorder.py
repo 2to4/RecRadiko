@@ -20,7 +20,7 @@ import aiohttp
 from dataclasses import dataclass
 
 from .auth import RadikoAuthenticator, AuthenticationError
-from .logging_config import get_logger
+from .utils.base import LoggerMixin
 
 
 @dataclass
@@ -64,15 +64,15 @@ class FileConversionError(TimeFreeError):
     pass
 
 
-class TimeFreeRecorder:
+class TimeFreeRecorder(LoggerMixin):
     """タイムフリー専用録音クラス"""
     
     # Radiko タイムフリーAPI
     TIMEFREE_URL_API = "https://radiko.jp/v2/api/ts/playlist.m3u8"
     
     def __init__(self, authenticator: RadikoAuthenticator):
+        super().__init__()  # LoggerMixin初期化
         self.authenticator = authenticator
-        self.logger = get_logger(__name__)
         self.max_workers = 8
         self.segment_timeout = 30
         self.retry_attempts = 3

@@ -28,10 +28,7 @@ from src.cli import RecRadikoCLI
 from src.auth import RadikoAuthenticator, AuthInfo
 from src.program_info import ProgramInfoManager, Program, Station
 from src.streaming import StreamingManager, StreamInfo, StreamSegment
-from src.recording import RecordingManager, RecordingJob, RecordingStatus
-from src.file_manager import FileManager, FileMetadata
-from src.scheduler import RecordingScheduler, RecordingSchedule, RepeatPattern, ScheduleStatus
-from src.daemon import DaemonManager, DaemonStatus
+# 削除されたモジュール: RecordingManager, FileManager, RecordingScheduler, DaemonManager (タイムフリー専用システム)
 from src.error_handler import ErrorHandler
 
 
@@ -131,7 +128,7 @@ class TestFailureRecoveryC1:
             ]
             
             # 番組情報取得のリトライテスト
-            program_manager.fetch_station_list.side_effect = [
+            program_manager.get_station_list.side_effect = [
                 Exception("DNS resolution failed"),
                 Exception("DNS resolution failed"),
                 [Station(id="TEST", name="テストラジオ", ascii_name="TEST", area_id="JP13")]
@@ -142,7 +139,7 @@ class TestFailureRecoveryC1:
                     recovery_metrics['network_failures_simulated'] += 1
                     
                     # 番組情報取得リトライ
-                    stations = program_manager.fetch_station_list()
+                    stations = program_manager.get_station_list()
                     if stations:
                         recovery_time = time.time() - failure_start
                         recovery_metrics['recovery_time_seconds'].append(recovery_time)

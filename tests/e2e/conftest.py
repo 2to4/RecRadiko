@@ -22,13 +22,10 @@ from src.cli import RecRadikoCLI
 from src.auth import RadikoAuthenticator, AuthInfo
 from src.program_info import ProgramInfoManager, Program, Station
 from src.streaming import StreamingManager, StreamInfo, StreamSegment
-from src.recording import RecordingManager, RecordingJob, RecordingStatus
-from src.file_manager import FileManager, FileMetadata, StorageInfo
-from src.scheduler import RecordingScheduler, RecordingSchedule, RepeatPattern, ScheduleStatus
-from src.daemon import DaemonManager, DaemonStatus
+# 削除されたモジュール: RecordingManager, FileManager (タイムフリー専用システムによりFinder連携)
+from src.timefree_recorder import TimeFreeRecorder, RecordingResult
 from src.error_handler import ErrorHandler, ErrorRecord
 # タイムフリー専用システム - ライブストリーミング関連は削除済み
-from src.timefree_recorder import TimeFreeRecorder, RecordingResult
 from src.program_history import ProgramHistoryManager
 
 
@@ -233,48 +230,6 @@ class TestDataGenerator:
         
         return programs
     
-    @staticmethod
-    def generate_schedules(stations: List[Station], count: int = 100) -> List[RecordingSchedule]:
-        """テスト用録音スケジュール生成"""
-        schedules = []
-        base_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        repeat_patterns = [
-            RepeatPattern.NONE,
-            RepeatPattern.DAILY, 
-            RepeatPattern.WEEKLY,
-            RepeatPattern.WEEKDAYS,
-            RepeatPattern.WEEKENDS,
-            RepeatPattern.MONTHLY
-        ]
-        
-        for i in range(count):
-            station = stations[i % len(stations)]
-            pattern = repeat_patterns[i % len(repeat_patterns)]
-            
-            start_time = base_time + timedelta(
-                days=i % 30,
-                hours=(6 + i * 2) % 24,
-                minutes=(i * 15) % 60
-            )
-            end_time = start_time + timedelta(hours=1 + (i % 3))
-            
-            schedules.append(RecordingSchedule(
-                schedule_id=f"schedule_{i:04d}",
-                station_id=station.id,
-                program_title=f"テスト番組_{i:04d}",
-                start_time=start_time,
-                end_time=end_time,
-                repeat_pattern=pattern,
-                repeat_end_date=base_time + timedelta(days=365) if pattern != RepeatPattern.NONE else None,
-                status=ScheduleStatus.ACTIVE,
-                format="aac",
-                bitrate=128 + (i % 4) * 64,
-                notification_enabled=i % 2 == 0,
-                notification_minutes=5 if i % 3 == 0 else 1
-            ))
-        
-        return schedules
     
     @staticmethod
     def generate_large_file_set(base_dir: str, file_count: int = 10000) -> List[str]:
@@ -439,7 +394,7 @@ def mock_external_services():
     """外部サービスのモック"""
     with patch('src.auth.RadikoAuthenticator.authenticate') as mock_auth, \
          patch('src.streaming.StreamingManager.get_stream_url') as mock_stream, \
-         patch('src.program_info.ProgramInfoManager.fetch_station_list') as mock_stations, \
+         patch('src.program_info.ProgramInfoManager.get_station_list') as mock_stations, \
          patch('src.program_info.ProgramInfoManager.fetch_program_guide') as mock_programs:
         
         # 認証モック

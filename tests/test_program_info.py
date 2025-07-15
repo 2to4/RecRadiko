@@ -202,7 +202,7 @@ class TestProgramInfoManager(unittest.TestCase):
         self.assertIn('programs', tables)
     
     @patch('requests.Session.get')
-    def test_fetch_station_list_success(self, mock_get):
+    def test_get_station_list_success(self, mock_get):
         """放送局リスト取得成功のテスト"""
         # モックXMLレスポンス（実際のRadiko API構造に合わせて修正）
         xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -228,7 +228,7 @@ class TestProgramInfoManager(unittest.TestCase):
         mock_response.content = xml_content.encode('utf-8')
         mock_get.return_value = mock_response
         
-        stations = self.manager.fetch_station_list()
+        stations = self.manager.get_station_list()
         
         self.assertEqual(len(stations), 2)
         self.assertEqual(stations[0].id, "TBS")
@@ -237,12 +237,12 @@ class TestProgramInfoManager(unittest.TestCase):
         self.assertEqual(stations[1].name, "文化放送")
     
     @patch('requests.Session.get')
-    def test_fetch_station_list_network_error(self, mock_get):
+    def test_get_station_list_network_error(self, mock_get):
         """放送局リスト取得ネットワークエラーのテスト"""
         mock_get.side_effect = Exception("Network error")
         
         with self.assertRaises(ProgramInfoError):
-            self.manager.fetch_station_list()
+            self.manager.get_station_list()
     
     @patch('requests.Session.get')
     def test_fetch_program_guide_success(self, mock_get):

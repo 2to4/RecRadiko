@@ -19,7 +19,8 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 from cryptography.fernet import Fernet
 
-from .logging_config import get_logger
+from .utils.base import LoggerMixin
+from .utils.network_utils import create_radiko_session
 
 
 @dataclass
@@ -52,7 +53,7 @@ class LocationInfo:
     country: str
 
 
-class RadikoAuthenticator:
+class RadikoAuthenticator(LoggerMixin):
     """Radiko認証を管理するクラス"""
     
     # Radiko API エンドポイント
@@ -81,18 +82,14 @@ class RadikoAuthenticator:
     }
     
     def __init__(self, config_path: str = "auth_config.json"):
+        super().__init__()  # LoggerMixin初期化
+        
         self.config_path = Path(config_path)
-        self.session = requests.Session()
-        self.session.headers.update(self.DEFAULT_HEADERS)
+        self.session = create_radiko_session(additional_headers=self.DEFAULT_HEADERS)
         
         self.auth_info: Optional[AuthInfo] = None
         self.location_info: Optional[LocationInfo] = None
         self.encryption_key = self._get_or_create_key()
-        
-        self.logger = get_logger(__name__)
-        
-        # セッションの設定
-        self.session.timeout = 30
     
     def _generate_partialkey(self, offset: int, length: int) -> str:
         """部分キーを生成"""

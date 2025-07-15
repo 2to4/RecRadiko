@@ -14,13 +14,25 @@ import sqlite3
 import json
 import requests
 from datetime import datetime, timedelta
+
+# Python 3.12+ SQLite datetime adapter 警告回避
+def adapt_datetime(dt):
+    return dt.isoformat()
+
+def convert_datetime(val):
+    return datetime.fromisoformat(val.decode())
+
+sqlite3.register_adapter(datetime, adapt_datetime)
+sqlite3.register_converter("datetime", convert_datetime)
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Any
 from dataclasses import dataclass
 
 from .auth import RadikoAuthenticator
-from .logging_config import get_logger
 from .program_info import ProgramInfo
+from .utils.base import LoggerMixin
+from .utils.network_utils import create_radiko_session
+from .utils.path_utils import ensure_directory_path_exists
 
 
 class ProgramHistoryError(Exception):
@@ -38,29 +50,29 @@ class ProgramParseError(ProgramHistoryError):
     pass
 
 
-class ProgramCache:
+class ProgramCache(LoggerMixin):
     """番組表キャッシュクラス"""
     
     def __init__(self, cache_dir: str = "~/.recradiko/cache", expire_hours: int = 24):
+        super().__init__()  # LoggerMixin初期化
         self.cache_dir = Path(cache_dir).expanduser()
         self.expire_hours = expire_hours
         self.db_path = self.cache_dir / "program_cache.db"
-        self.logger = get_logger(__name__)
         self._init_database()
     
     def _init_database(self):
         """キャッシュデータベース初期化"""
         try:
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            ensure_directory_path_exists(self.cache_dir)
             
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES) as conn:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS program_cache (
                         id INTEGER PRIMARY KEY,
                         cache_key TEXT UNIQUE NOT NULL,
                         program_data TEXT NOT NULL,
-                        cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        expires_at TIMESTAMP NOT NULL
+                        cached_at datetime DEFAULT CURRENT_TIMESTAMP,
+                        expires_at datetime NOT NULL
                     )
                 """)
                 
@@ -87,7 +99,7 @@ class ProgramCache:
         try:
             cache_key = self._generate_cache_key(date, station_id)
             
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES) as conn:
                 cursor = conn.execute(
                     "SELECT program_data FROM program_cache WHERE cache_key = ? AND expires_at > datetime('now')",
                     (cache_key,)
@@ -119,7 +131,7 @@ class ProgramCache:
             expires_at = datetime.now() + timedelta(hours=self.expire_hours)
             program_data = json.dumps([p.to_dict() for p in programs], ensure_ascii=False)
             
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES) as conn:
                 conn.execute(
                     "INSERT OR REPLACE INTO program_cache (cache_key, program_data, expires_at) VALUES (?, ?, ?)",
                     (cache_key, program_data, expires_at)
@@ -149,7 +161,7 @@ class ProgramCache:
     def clear_expired_cache(self):
         """期限切れキャッシュの削除"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES) as conn:
                 cursor = conn.execute("DELETE FROM program_cache WHERE expires_at < datetime('now')")
                 deleted_count = cursor.rowcount
                 conn.commit()
@@ -161,23 +173,17 @@ class ProgramCache:
             self.logger.warning(f"キャッシュクリーンアップエラー: {e}")
 
 
-class ProgramHistoryManager:
+class ProgramHistoryManager(LoggerMixin):
     """過去番組表管理クラス"""
     
     # Radiko 番組表API
     PROGRAM_API_BASE = "https://radiko.jp/v3/program/date"
     
     def __init__(self, authenticator: RadikoAuthenticator):
+        super().__init__()  # LoggerMixin初期化
         self.authenticator = authenticator
-        self.logger = get_logger(__name__)
         self.cache = ProgramCache()
-        self.session = requests.Session()
-        self.session.timeout = 30
-        
-        # User-Agentを設定
-        self.session.headers.update({
-            'User-Agent': 'RecRadiko/1.0'
-        })
+        self.session = create_radiko_session()
     
     def get_programs_by_date(self, date: str, station_id: str = None) -> List[ProgramInfo]:
         """指定日の番組表取得

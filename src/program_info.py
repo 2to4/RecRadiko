@@ -20,7 +20,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .auth import RadikoAuthenticator, AuthenticationError
-from .logging_config import get_logger
+from .utils.base import LoggerMixin
+from .utils.network_utils import create_radiko_session
 
 
 @dataclass
@@ -174,7 +175,7 @@ class ProgramInfo:
         return cls(**data)
 
 
-class ProgramInfoManager:
+class ProgramInfoManager(LoggerMixin):
     """番組情報管理クラス"""
     
     # Radiko API エンドポイント
@@ -184,19 +185,17 @@ class ProgramInfoManager:
     
     def __init__(self, db_path: str = "radiko.db", area_id: str = "JP13", 
                  authenticator: Optional[RadikoAuthenticator] = None):
+        super().__init__()  # LoggerMixin初期化
+        
         self.db_path = Path(db_path)
         self.area_id = area_id
         self.authenticator = authenticator or RadikoAuthenticator()
         
         # セッション設定
-        self.session = requests.Session()
-        self.session.timeout = 30
+        self.session = create_radiko_session()
         
         # 日本時間のタイムゾーン設定
         self.jst = pytz.timezone('Asia/Tokyo')
-        
-        # ログ設定
-        self.logger = get_logger(__name__)
         
         # データベースロック
         self.db_lock = threading.RLock()

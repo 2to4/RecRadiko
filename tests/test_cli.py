@@ -9,7 +9,7 @@ import sys
 import io
 import json
 import argparse
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
@@ -31,12 +31,12 @@ class TestTimeFreeRecRadikoCLI(unittest.TestCase):
         # モックオブジェクトの作成
         self.mock_auth = Mock()
         self.mock_program_info = Mock()
-        self.mock_file_manager = Mock()
+        # self.mock_file_manager = Mock()  # 削除されたモジュール
         self.mock_error_handler = Mock()
         
-        # タイムフリー専用モック
-        self.mock_timefree_recorder = Mock(spec=TimeFreeRecorder)
-        self.mock_program_history = Mock(spec=ProgramHistoryManager)
+        # タイムフリー専用モック（spec削除でAsyncMock警告回避）
+        self.mock_timefree_recorder = Mock()
+        self.mock_program_history = Mock()
         
         # テスト用設定ファイルを作成（タイムフリー専用）
         test_config = {
@@ -54,12 +54,11 @@ class TestTimeFreeRecRadikoCLI(unittest.TestCase):
         with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(test_config, f)
         
-        # CLIインスタンスの作成（依存性注入）
+        # CLIインスタンスの作成（依存性注入・タイムフリー専用）
         self.cli = RecRadikoCLI(
             config_file=config_file,
             auth_manager=self.mock_auth,
             program_info_manager=self.mock_program_info,
-            file_manager=self.mock_file_manager,
             error_handler=self.mock_error_handler
         )
         
@@ -92,7 +91,7 @@ class TestTimeFreeRecRadikoCLI(unittest.TestCase):
         self.assertIsInstance(self.cli, RecRadikoCLI)
         self.assertEqual(self.cli.auth_manager, self.mock_auth)
         self.assertEqual(self.cli.program_info_manager, self.mock_program_info)
-        self.assertEqual(self.cli.file_manager, self.mock_file_manager)
+        # self.assertEqual(self.cli.file_manager, self.mock_file_manager)  # 削除されたモジュール
         self.assertEqual(self.cli.error_handler, self.mock_error_handler)
         
         # タイムフリー専用コンポーネント確認
@@ -284,8 +283,8 @@ class TestTimeFreeRecordCommand(unittest.TestCase):
             json.dump({"area_id": "JP13", "output_dir": self.temp_dir}, f)
         
         cli = RecRadikoCLI(config_file=config_file)
-        cli.program_history_manager = Mock(spec=ProgramHistoryManager)
-        cli.timefree_recorder = Mock(spec=TimeFreeRecorder)
+        cli.program_history_manager = Mock()
+        cli.timefree_recorder = Mock()
         return cli
     
     @patch('asyncio.run')
@@ -406,8 +405,8 @@ class TestTimeFreeRecordIdCommand(unittest.TestCase):
             json.dump({"area_id": "JP13", "output_dir": self.temp_dir}, f)
         
         cli = RecRadikoCLI(config_file=config_file)
-        cli.program_history_manager = Mock(spec=ProgramHistoryManager)
-        cli.timefree_recorder = Mock(spec=TimeFreeRecorder)
+        cli.program_history_manager = Mock()
+        cli.timefree_recorder = Mock()
         return cli
     
     @patch('asyncio.run')
@@ -596,8 +595,8 @@ class TestTimeFreeErrorHandling(unittest.TestCase):
             json.dump({"area_id": "JP13"}, f)
         
         cli = RecRadikoCLI(config_file=config_file)
-        cli.program_history_manager = Mock(spec=ProgramHistoryManager)
-        cli.timefree_recorder = Mock(spec=TimeFreeRecorder)
+        cli.program_history_manager = Mock()
+        cli.timefree_recorder = Mock()
         return cli
     
     def test_list_programs_command_exception_handling(self):

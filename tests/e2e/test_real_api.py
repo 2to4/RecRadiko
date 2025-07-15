@@ -28,7 +28,7 @@ from typing import Optional
 from src.auth import RadikoAuthenticator, AuthInfo
 from src.program_info import ProgramInfoManager
 from src.streaming import StreamingManager
-from src.recording import RecordingManager, RecordingJob, RecordingStatus
+# 削除されたモジュール: RecordingManager (タイムフリー専用システム)
 from src.cli import RecRadikoCLI
 # タイムフリー専用システム - ライブストリーミング関連は削除済み
 from src.timefree_recorder import TimeFreeRecorder

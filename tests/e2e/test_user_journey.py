@@ -22,10 +22,8 @@ from src.cli import RecRadikoCLI
 from src.auth import RadikoAuthenticator, AuthInfo
 from src.program_info import ProgramInfoManager, Program, Station
 from src.streaming import StreamingManager, StreamInfo, StreamSegment
-from src.recording import RecordingManager, RecordingJob, RecordingStatus
-from src.file_manager import FileManager, FileMetadata
-from src.scheduler import RecordingScheduler, RecordingSchedule, RepeatPattern, ScheduleStatus
-from src.daemon import DaemonManager, DaemonStatus
+# 削除されたモジュール: RecordingManager, FileManager (タイムフリー専用システム)
+# 削除されたモジュール: RecordingScheduler, DaemonManager (タイムフリー専用システム)
 from src.error_handler import ErrorHandler
 
 
@@ -74,7 +72,7 @@ class TestUserJourneyA1:
                     Station(id="QRR", name="文化放送", ascii_name="QRR", area_id="JP13"),
                     Station(id="LFR", name="ニッポン放送", ascii_name="LFR", area_id="JP13"),
                 ]
-                cli.program_manager.fetch_station_list.return_value = test_stations
+                cli.program_manager.get_station_list.return_value = test_stations
                 
                 # 5. 放送局一覧の取得・表示テスト
                 stations_result = cli._execute_interactive_command(['list-stations'])
@@ -156,7 +154,7 @@ class TestUserJourneyA1:
                 assert mock_create_config.called, "デフォルト設定の作成が行われていない"
                 assert mock_detect_area.called, "地域自動検出が行われていない"
                 cli.authenticator.authenticate.assert_called_once()
-                cli.program_manager.fetch_station_list.assert_called_once()
+                cli.program_manager.get_station_list.assert_called_once()
                 cli.recording_manager.create_recording_job.assert_called_once()
     
     def test_initial_configuration_validation(self, temp_environment):
@@ -398,7 +396,7 @@ class TestUserJourneyA2:
         ]
         
         # 競合検出
-        from src.scheduler import ScheduleConflict
+        # from src.scheduler import ScheduleConflict  # 削除されたモジュール
         conflicts = [
             ScheduleConflict(
                 schedule1_id="conflict_01",

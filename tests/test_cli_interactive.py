@@ -13,7 +13,6 @@ from pathlib import Path
 
 from src.cli import RecRadikoCLI
 from src.recording import RecordingJob, RecordingStatus
-from src.scheduler import RecordingSchedule, ScheduleStatus, RepeatPattern
 from src.program_info import Station, Program
 from src.file_manager import FileMetadata
 from datetime import datetime, timedelta
@@ -48,7 +47,6 @@ class TestCLIInteractiveMode(unittest.TestCase):
         self.mock_streaming = Mock()
         self.mock_recording = Mock()
         self.mock_file_manager = Mock()
-        self.mock_scheduler = Mock()
         self.mock_error_handler = Mock()
         
         # タイムフリー専用モックコンポーネント
@@ -63,7 +61,6 @@ class TestCLIInteractiveMode(unittest.TestCase):
             streaming_manager=self.mock_streaming,
             recording_manager=self.mock_recording,
             file_manager=self.mock_file_manager,
-            scheduler=self.mock_scheduler,
             error_handler=self.mock_error_handler
         )
         
@@ -180,7 +177,7 @@ class TestCLIInteractiveMode(unittest.TestCase):
             Station(id="QRR", name="文化放送", ascii_name="QRR", area_id="JP13", logo_url="", banner_url=""),
             Station(id="LFR", name="ニッポン放送", ascii_name="LFR", area_id="JP13", logo_url="", banner_url="")
         ]
-        self.mock_program_info.fetch_station_list.return_value = mock_stations
+        self.mock_program_info.get_station_list.return_value = mock_stations
         
         with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
             result = self.cli._execute_interactive_command(['list-stations'])
@@ -192,7 +189,7 @@ class TestCLIInteractiveMode(unittest.TestCase):
             self.assertIn("TBS", output)
             self.assertIn("QRR", output)
             self.assertIn("LFR", output)
-            self.mock_program_info.fetch_station_list.assert_called_once()
+            self.mock_program_info.get_station_list.assert_called_once()
     
     def test_interactive_list_programs_command(self):
         """タイムフリー専用対話型番組表コマンドのテスト"""
@@ -331,7 +328,7 @@ class TestCLIInteractiveMode(unittest.TestCase):
         mock_stations = [
             Station(id="TBS", name="TBSラジオ", ascii_name="TBS", area_id="JP13", logo_url="", banner_url="")
         ]
-        self.mock_program_info.fetch_station_list.return_value = mock_stations
+        self.mock_program_info.get_station_list.return_value = mock_stations
         
         with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
             result = self.cli._run_interactive()

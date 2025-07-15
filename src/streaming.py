@@ -24,7 +24,8 @@ from pathlib import Path
 import tempfile
 
 from .auth import RadikoAuthenticator, AuthenticationError
-from .logging_config import get_logger
+from .utils.base import LoggerMixin
+from .utils.network_utils import create_streaming_session
 
 
 @dataclass
@@ -59,7 +60,7 @@ class StreamInfo:
             self.total_duration = sum(seg.duration for seg in self.segments)
 
 
-class StreamingManager:
+class StreamingManager(LoggerMixin):
     """ストリーミング管理クラス"""
     
     # Radiko ストリーミング API
@@ -67,13 +68,13 @@ class StreamingManager:
     TIMEFREE_URL_API = "https://radiko.jp/v2/api/ts/playlist.m3u8"
     
     def __init__(self, authenticator: RadikoAuthenticator, max_workers: int = 4):
+        super().__init__()  # LoggerMixin初期化
+        
         self.authenticator = authenticator
         self.max_workers = max_workers
-        self.logger = get_logger(__name__)
         
         # セッション設定
-        self.session = requests.Session()
-        self.session.timeout = 30
+        self.session = create_streaming_session()
         
         # セグメントダウンロード用の設定
         self.segment_timeout = 30
@@ -81,10 +82,6 @@ class StreamingManager:
         self.buffer_size = 8192
         self.max_segment_cache = 100
         
-        # アクティブなストリーミング管理
-        self.active_streams: Dict[str, threading.Thread] = {}
-        self.stream_stop_flags: Dict[str, threading.Event] = {}
-        self.stream_progress: Dict[str, float] = {}
         
         # セグメントキャッシュ
         self.segment_cache: Dict[str, bytes] = {}
@@ -117,11 +114,8 @@ class StreamingManager:
                 }
                 url = self.TIMEFREE_URL_API
             else:
-                # ライブストリーミング用パラメータ
-                params = {
-                    'station_id': station_id
-                }
-                url = self.STREAM_URL_API
+                # タイムフリー専用システム（ライブストリーミング機能削除済み）
+                raise StreamingError("ライブストリーミング機能は削除されました。タイムフリー録音を使用してください。")
             
             # ヘッダーを設定
             headers = {
@@ -480,98 +474,9 @@ class StreamingManager:
             # 復号化に失敗した場合は元のデータを返す
             return data
     
-    def start_live_streaming(self, station_id: str, duration_minutes: int,
-                            output_path: str, 
-                            progress_callback: Optional[Callable[[int, int], None]] = None) -> str:
-        """ライブストリーミングを開始"""
-        stream_id = f"{station_id}_{int(time.time())}"
-        stop_flag = threading.Event()
-        self.stream_stop_flags[stream_id] = stop_flag
-        self.stream_progress[stream_id] = 0.0
-        
-        def stream_worker():
-            try:
-                self.logger.info(f"ライブストリーミング開始: {stream_id}")
-                end_time = datetime.now() + timedelta(minutes=duration_minutes)
-                
-                with open(output_path, 'wb') as output_file:
-                    segments_written = 0
-                    total_segments_estimate = duration_minutes * 4  # 15秒セグメント想定
-                    
-                    while datetime.now() < end_time and not stop_flag.is_set():
-                        try:
-                            # プレイリストを取得
-                            playlist_url = self.get_stream_url(station_id)
-                            stream_info = self.parse_playlist(playlist_url)
-                            
-                            # セグメントをダウンロード
-                            for segment_data in self.download_segments(
-                                stream_info, output_path, None, stop_flag
-                            ):
-                                if stop_flag.is_set():
-                                    break
-                                
-                                output_file.write(segment_data)
-                                output_file.flush()
-                                segments_written += 1
-                                
-                                # 進捗を更新
-                                progress = min(segments_written / total_segments_estimate * 100, 100)
-                                self.stream_progress[stream_id] = progress
-                                
-                                if progress_callback:
-                                    progress_callback(segments_written, total_segments_estimate)
-                            
-                            # 次のプレイリスト更新まで待機
-                            if not stop_flag.is_set():
-                                time.sleep(10)
-                                
-                        except Exception as e:
-                            self.logger.error(f"ストリーミングエラー: {e}")
-                            if not stop_flag.is_set():
-                                time.sleep(5)  # エラー時は短い間隔で再試行
-                            continue
-                
-                self.stream_progress[stream_id] = 100.0
-                self.logger.info(f"ライブストリーミング完了: {stream_id}")
-                
-            except Exception as e:
-                self.logger.error(f"ライブストリーミングエラー: {e}")
-                raise StreamingError(f"ライブストリーミングに失敗しました: {e}")
-            finally:
-                # クリーンアップ
-                if stream_id in self.stream_stop_flags:
-                    del self.stream_stop_flags[stream_id]
-                if stream_id in self.active_streams:
-                    del self.active_streams[stream_id]
-                if stream_id in self.stream_progress:
-                    del self.stream_progress[stream_id]
-        
-        # ストリーミングスレッドを開始
-        stream_thread = threading.Thread(target=stream_worker)
-        stream_thread.start()
-        self.active_streams[stream_id] = stream_thread
-        
-        return stream_id
     
-    def stop_streaming(self, stream_id: str):
-        """ストリーミングを停止"""
-        if stream_id in self.stream_stop_flags:
-            self.stream_stop_flags[stream_id].set()
-            self.logger.info(f"ストリーミング停止要求: {stream_id}")
-        
-        if stream_id in self.active_streams:
-            self.active_streams[stream_id].join(timeout=10)
-            if self.active_streams[stream_id].is_alive():
-                self.logger.warning(f"ストリーミングスレッドが正常に終了しませんでした: {stream_id}")
     
-    def get_streaming_progress(self, stream_id: str) -> float:
-        """ストリーミングの進捗を取得"""
-        return self.stream_progress.get(stream_id, 0.0)
     
-    def get_active_streams(self) -> List[str]:
-        """アクティブなストリーミング一覧を取得"""
-        return list(self.active_streams.keys())
     
     def clear_cache(self):
         """セグメントキャッシュをクリア"""

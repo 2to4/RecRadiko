@@ -104,36 +104,41 @@ class TestTimeFreeUrlGeneration:
     """タイムフリーURL生成テスト"""
     
     def test_generate_timefree_url_success(self, timefree_recorder, mock_authenticator):
-        """正常なURL生成"""
+        """正常なURL生成（2025年仕様：直接URL生成）"""
         start_time = datetime(2025, 7, 10, 6, 0, 0)
         end_time = datetime(2025, 7, 10, 8, 30, 0)
         
-        # タイムフリーURL生成のモックを設定
-        expected_url = "https://radiko.jp/v2/api/ts/playlist.m3u8?station_id=TBS&start_at=20250710060000&ft=20250710060000&to=20250710083000&type=b"
-        mock_authenticator.get_timefree_playlist_url.return_value = expected_url
+        # 2025年仕様：直接URL生成のため、期待されるURL形式
+        expected_url = "https://radiko.jp/v2/api/ts/playlist.m3u8?station_id=TBS&ft=20250710060000&to=20250710083000"
         
         url = timefree_recorder._generate_timefree_url("TBS", start_time, end_time)
         
         # URL形式の確認
         assert url == expected_url
         
-        # 認証システムのメソッドが正しい引数で呼ばれたかを確認
-        mock_authenticator.get_timefree_playlist_url.assert_called_once_with(
-            station_id="TBS",
-            start_time="20250710060000",
-            duration=9000  # 2.5時間 = 9000秒
-        )
+        # 2025年仕様：認証システムメソッドは呼ばれない（直接URL生成）
+        # 代わりに、URL構造の詳細検証
+        assert "station_id=TBS" in url
+        assert "ft=20250710060000" in url
+        assert "to=20250710083000" in url
+        assert "radiko.jp/v2/api/ts/playlist.m3u8" in url
     
-    def test_generate_timefree_url_auth_error(self, timefree_recorder, mock_authenticator):
-        """認証エラー時のURL生成"""
-        from src.auth import AuthenticationError
-        mock_authenticator.get_timefree_playlist_url.side_effect = AuthenticationError("認証失敗")
-        
+    def test_generate_timefree_url_various_stations(self, timefree_recorder, mock_authenticator):
+        """様々な放送局でのURL生成（2025年仕様：直接URL生成）"""
         start_time = datetime(2025, 7, 10, 6, 0, 0)
         end_time = datetime(2025, 7, 10, 8, 30, 0)
         
-        with pytest.raises(TimeFreeAuthError, match="認証に失敗しました"):
-            timefree_recorder._generate_timefree_url("TBS", start_time, end_time)
+        # 複数の放送局でテスト
+        stations = ["TBS", "LFR", "QRR", "RN1"]
+        
+        for station_id in stations:
+            url = timefree_recorder._generate_timefree_url(station_id, start_time, end_time)
+            
+            # 各放送局のURL構造を確認
+            assert f"station_id={station_id}" in url
+            assert "ft=20250710060000" in url
+            assert "to=20250710083000" in url
+            assert "radiko.jp/v2/api/ts/playlist.m3u8" in url
 
 
 class TestPlaylistFetching:
@@ -141,61 +146,69 @@ class TestPlaylistFetching:
     
     @pytest.mark.asyncio
     async def test_fetch_playlist_success(self, timefree_recorder):
-        """正常なプレイリスト取得（適切な非同期Mock）"""
+        """正常なプレイリスト取得（2025年Radiko 2段階プレイリスト対応）"""
+        # 1段目: playlist.m3u8 (ストリーム情報) 
         mock_playlist_content = """#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=128000,CODECS="mp4a.40.2"
+https://radiko.jp/v2/api/ts/chunklist.m3u8?station_id=TBS
+"""
+        
+        # 2段目: chunklist.m3u8 (実際のセグメント)
+        mock_chunklist_content = """#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:5
 #EXT-X-MEDIA-SEQUENCE:0
 #EXTINF:5.0,
-segment_0.ts
+https://radiko.jp/v2/api/ts/segment_0.aac
 #EXTINF:5.0,
-segment_1.ts
+https://radiko.jp/v2/api/ts/segment_1.aac
 #EXTINF:5.0,
-segment_2.ts
+https://radiko.jp/v2/api/ts/segment_2.aac
 #EXT-X-ENDLIST
 """
         
-        # aioresponses を使用した正しい非同期Mockアプローチ
+        # Radiko 2段階プレイリスト対応の非同期Mock
         with patch('aiohttp.ClientSession') as mock_session_class:
-            # Mockレスポンス作成
-            mock_response = Mock()
-            mock_response.status = 200
-            mock_response.text = AsyncMock(return_value=mock_playlist_content)
+            # 1段目レスポンス (playlist.m3u8)
+            mock_playlist_response = Mock()
+            mock_playlist_response.status = 200
+            mock_playlist_response.text = AsyncMock(return_value=mock_playlist_content)
             
-            # コンテキストマネージャーを正しく設定
+            # 2段目レスポンス (chunklist.m3u8)
+            mock_chunklist_response = Mock()
+            mock_chunklist_response.status = 200
+            mock_chunklist_response.text = AsyncMock(return_value=mock_chunklist_content)
+            
+            # セッションとコンテキストマネージャー設定
             mock_session = Mock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=None)
             
-            mock_get = Mock()
-            mock_get.__aenter__ = AsyncMock(return_value=mock_response)
-            mock_get.__aexit__ = AsyncMock(return_value=None)
-            mock_session.get = Mock(return_value=mock_get)
+            # get メソッドの戻り値を順番に設定
+            mock_get_calls = [
+                Mock(__aenter__=AsyncMock(return_value=mock_playlist_response), __aexit__=AsyncMock(return_value=None)),
+                Mock(__aenter__=AsyncMock(return_value=mock_chunklist_response), __aexit__=AsyncMock(return_value=None))
+            ]
+            mock_session.get = Mock(side_effect=mock_get_calls)
             
             mock_session_class.return_value = mock_session
             
-            with patch('m3u8.loads') as mock_m3u8:
-                mock_playlist = Mock()
-                mock_playlist.segments = [
-                    Mock(uri="segment_0.ts"),
-                    Mock(uri="segment_1.ts"), 
-                    Mock(uri="segment_2.ts")
-                ]
-                mock_m3u8.return_value = mock_playlist
-                
-                playlist_url = "https://example.com/playlist.m3u8"
-                segment_urls = await timefree_recorder._fetch_playlist(playlist_url)
-                
-                assert len(segment_urls) == 3
-                assert all(url.startswith("https://example.com/") for url in segment_urls)
+            playlist_url = "https://radiko.jp/v2/api/ts/playlist.m3u8"
+            segment_urls = await timefree_recorder._fetch_playlist(playlist_url)
+            
+            assert len(segment_urls) == 3
+            assert all(".aac" in url for url in segment_urls)
+            assert all("radiko.jp" in url for url in segment_urls)
     
     @pytest.mark.asyncio
     async def test_fetch_playlist_http_error(self, timefree_recorder):
         """HTTP エラー時のプレイリスト取得"""
         with patch('aiohttp.ClientSession') as mock_session_class:
-            # 404エラーレスポンス
+            # 404エラーレスポンス（非同期text()メソッド対応）
             mock_response = Mock()
             mock_response.status = 404
+            mock_response.text = AsyncMock(return_value="404 Not Found")
             
             # コンテキストマネージャーを正しく設定
             mock_session = Mock()

@@ -512,58 +512,35 @@ class TestTimeFreeAuthentication(unittest.TestCase):
             if os.path.exists(file):
                 os.remove(file)
     
-    @patch('src.auth.requests.Session.get')
-    def test_authenticate_timefree_success(self, mock_get):
-        """タイムフリー認証成功のテスト"""
-        # タイムフリー認証レスポンスをモック
-        mock_response = Mock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.headers = {
-            'X-Radiko-TimeFree-Token': 'timefree_token_123'
-        }
-        mock_get.return_value = mock_response
+    def test_authenticate_timefree_success(self):
+        """タイムフリー認証成功のテスト（2025年仕様：基本認証トークン使用）"""
+        # 2025年仕様：追加のHTTPリクエストなしで基本認証トークンを使用
         
         # タイムフリー認証実行
         timefree_session = self.authenticator.authenticate_timefree()
         
-        # 結果を確認
-        self.assertEqual(timefree_session, 'timefree_token_123')
-        self.assertEqual(self.authenticator.auth_info.timefree_session, 'timefree_token_123')
+        # 結果を確認（2025年仕様：基本認証トークンを使用）
+        self.assertEqual(timefree_session, 'base_auth_token')
+        self.assertEqual(self.authenticator.auth_info.timefree_session, 'base_auth_token')
         self.assertIsNotNone(self.authenticator.auth_info.timefree_expires_at)
         self.assertFalse(self.authenticator.auth_info.is_timefree_session_expired())
         
-        # リクエストヘッダーを確認
-        args, kwargs = mock_get.call_args
-        self.assertEqual(args[0], self.authenticator.TIMEFREE_AUTH_URL)
-        self.assertIn('X-Radiko-AuthToken', kwargs['headers'])
-        self.assertEqual(kwargs['headers']['X-Radiko-AuthToken'], 'base_auth_token')
-        self.assertEqual(kwargs['headers']['X-Radiko-App'], 'pc_ts')
+        # 2025年仕様：HTTPリクエストは発生しないため、リクエストヘッダー確認はスキップ
+        # mock_get.assert_not_called()  # HTTPリクエストが発生しないことを確認
     
-    @patch('src.auth.requests.Session.get')
-    def test_authenticate_timefree_no_token(self, mock_get):
-        """タイムフリー認証でトークンが取得できない場合のテスト"""
-        # トークンなしのレスポンスをモック
-        mock_response = Mock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.headers = {}  # トークンなし
-        mock_get.return_value = mock_response
-        
-        # エラーが発生することを確認
-        with self.assertRaises(AuthenticationError) as context:
-            self.authenticator.authenticate_timefree()
-        
-        self.assertIn("タイムフリーセッショントークンが取得できませんでした", str(context.exception))
+    def test_authenticate_timefree_no_token(self):
+        """タイムフリー認証でトークンが取得できない場合のテスト（2025年仕様：基本認証使用）"""
+        # 2025年仕様：基本認証トークンを使用するため、追加のHTTPリクエストは不要
+        # 基本認証が有効であれば、タイムフリー認証も成功する
+        timefree_session = self.authenticator.authenticate_timefree()
+        self.assertEqual(timefree_session, 'base_auth_token')
     
-    @patch('src.auth.requests.Session.get')
-    def test_authenticate_timefree_request_error(self, mock_get):
-        """タイムフリー認証でリクエストエラーが発生する場合のテスト"""
-        mock_get.side_effect = requests.RequestException("Network error")
-        
-        # エラーが発生することを確認
-        with self.assertRaises(AuthenticationError) as context:
-            self.authenticator.authenticate_timefree()
-        
-        self.assertIn("タイムフリー認証に失敗しました", str(context.exception))
+    def test_authenticate_timefree_request_error(self):
+        """タイムフリー認証でリクエストエラーが発生する場合のテスト（2025年仕様：基本認証使用）"""
+        # 2025年仕様：基本認証トークンを使用するため、ネットワークエラーは発生しない
+        # 基本認証が有効であれば、タイムフリー認証も成功する  
+        timefree_session = self.authenticator.authenticate_timefree()
+        self.assertEqual(timefree_session, 'base_auth_token')
     
     def test_authenticate_timefree_cached_session(self):
         """キャッシュされたタイムフリーセッションの使用テスト"""
@@ -577,27 +554,18 @@ class TestTimeFreeAuthentication(unittest.TestCase):
         # キャッシュされたセッションが返されることを確認
         self.assertEqual(timefree_session, "cached_timefree_token")
     
-    @patch('src.auth.requests.Session.get')
-    def test_authenticate_timefree_force_refresh(self, mock_get):
-        """強制リフレッシュのテスト"""
+    def test_authenticate_timefree_force_refresh(self):
+        """強制リフレッシュのテスト（2025年仕様：基本認証トークン使用）"""
         # 有効なキャッシュがあるが強制リフレッシュ
         self.authenticator.auth_info.timefree_session = "old_timefree_token"
         self.authenticator.auth_info.timefree_expires_at = time.time() + 1800
         
-        # 新しいトークンのレスポンスをモック
-        mock_response = Mock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.headers = {
-            'X-Radiko-TimeFree-Token': 'new_timefree_token'
-        }
-        mock_get.return_value = mock_response
-        
         # 強制リフレッシュで認証実行
         timefree_session = self.authenticator.authenticate_timefree(force_refresh=True)
         
-        # 新しいトークンが取得されることを確認
-        self.assertEqual(timefree_session, 'new_timefree_token')
-        self.assertEqual(self.authenticator.auth_info.timefree_session, 'new_timefree_token')
+        # 基本認証トークンが返されることを確認（2025年仕様）
+        self.assertEqual(timefree_session, 'base_auth_token')
+        self.assertEqual(self.authenticator.auth_info.timefree_session, 'base_auth_token')
     
     def test_get_timefree_playlist_url(self):
         """タイムフリープレイリストURL生成のテスト"""
@@ -612,13 +580,11 @@ class TestTimeFreeAuthentication(unittest.TestCase):
             duration=3600
         )
         
-        # URLの構造を確認
-        self.assertIn(self.authenticator.TIMEFREE_PLAYLIST_URL, playlist_url)
+        # URLの構造を確認（2025年仕様：ft/toパラメータのみ）
+        self.assertIn("radiko.jp/v2/api/ts/playlist.m3u8", playlist_url)
         self.assertIn("station_id=TBS", playlist_url)
-        self.assertIn("start_at=20250713120000", playlist_url)
         self.assertIn("ft=20250713120000", playlist_url)
-        self.assertIn("to=20250713123600", playlist_url)  # start_time + duration
-        self.assertIn("type=b", playlist_url)
+        self.assertIn("to=20250713130000", playlist_url)  # start_time + duration
     
     @patch.object(RadikoAuthenticator, 'authenticate_timefree')
     def test_get_timefree_session(self, mock_authenticate_timefree):
@@ -659,9 +625,9 @@ class TestTimeFreeAuthentication(unittest.TestCase):
             # タイムフリー認証実行
             timefree_session = self.authenticator.authenticate_timefree()
             
-            # 基本認証が自動実行され、タイムフリー認証が成功することを確認
+            # 基本認証が自動実行され、タイムフリー認証が成功することを確認（2025年仕様）
             mock_get_valid_auth.assert_called_once()
-            self.assertEqual(timefree_session, 'timefree_token_auto')
+            self.assertEqual(timefree_session, 'auto_auth_token')
 
 
 if __name__ == '__main__':

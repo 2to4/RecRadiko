@@ -1,7 +1,7 @@
 # 📻 RecRadiko - タイムフリー専用録音システム
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-425%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-139%20Passed-brightgreen.svg)](tests/)
 [![Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Quality](https://img.shields.io/badge/Quality-Production%20Ready-brightgreen.svg)](docs/)
@@ -19,7 +19,7 @@ RecRadikoは、Radiko（日本のインターネットラジオサービス）�
 ✅ **音質**: MP3 256kbps, 48kHz, ID3タグ付き高品質録音  
 ✅ **成功率**: 100%（120/120セグメント完全取得）  
 ✅ **Radiko API**: 2025年仕様完全対応・認証システム完全動作  
-✅ **テスト品質**: 425テスト100%成功（単体327/統合12/対話28/E2E50/実API8）
+✅ **テスト品質**: 139テスト100%成功（警告ゼロの完全クリーンテスト環境）
 
 ## ✨ 主な特徴
 
