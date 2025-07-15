@@ -1416,6 +1416,14 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
                         if result:
                             print("✅ 検索からの録音が完了しました")
                             
+                    elif menu_result == "settings":
+                        # 設定画面
+                        from .ui.screens.settings_screen import SettingsScreen
+                        settings_screen = SettingsScreen()
+                        settings_result = settings_screen.run_settings_workflow()
+                        if settings_result:
+                            print("✅ 設定が更新されました")
+                            
                     elif menu_result is None or menu_result == "exit":
                         # 終了
                         print("\n👋 RecRadikoを終了します。")
