@@ -241,6 +241,13 @@ class RegionMapper:
     def get_default_area_id(cls) -> str:
         """デフォルト地域ID（東京）を取得"""
         return "JP13"
+    
+    @classmethod
+    def get_current_prefecture(cls) -> Optional[str]:
+        """現在の都道府県を取得（デフォルト実装）"""
+        # 設定から取得する場合の実装
+        # 現在はデフォルトで東京を返す
+        return "東京"
 
 
 # 使用例とテスト用関数

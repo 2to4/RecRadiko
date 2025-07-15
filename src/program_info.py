@@ -693,6 +693,39 @@ class ProgramInfoManager(LoggerMixin):
             self.logger.error(f"番組検索エラー: {e}")
             return []
     
+    def get_stations(self, area_id: str = None) -> List[Dict[str, str]]:
+        """放送局一覧を取得"""
+        try:
+            if area_id is None:
+                area_id = self.area_id
+            
+            # 放送局一覧XMLを取得
+            url = self.STATION_LIST_URL.format(area_id=area_id)
+            response = self.session.get(url, timeout=10)
+            response.raise_for_status()
+            
+            # XMLを解析
+            root = ET.fromstring(response.text)
+            stations = []
+            
+            for station in root.findall('.//station'):
+                station_id = station.get('id')
+                station_name = station.find('name').text if station.find('name') is not None else ''
+                
+                if station_id and station_name:
+                    stations.append({
+                        'id': station_id,
+                        'name': station_name,
+                        'area_id': area_id
+                    })
+            
+            self.logger.info(f"取得した放送局数: {len(stations)} (エリア: {area_id})")
+            return stations
+            
+        except Exception as e:
+            self.logger.error(f"放送局一覧取得エラー: {e}")
+            return []
+    
     def cleanup_old_programs(self, retention_days: int = 30):
         """古い番組情報を削除"""
         try:

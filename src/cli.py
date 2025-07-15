@@ -1398,8 +1398,8 @@ RecRadiko タイムフリー専用版 - 利用可能なコマンド:
                 print("📻 RecRadiko キーボードナビゲーション UI")
                 print("=" * 50)
                 
-                # 録音ワークフローの開始
-                result = workflow.start_recording_workflow()
+                # 録音ワークフローの開始（async対応）
+                result = workflow.run_sync()
                 
                 if result:
                     print("✅ 録音ワークフローが完了しました")

@@ -179,9 +179,9 @@ class ProgramHistoryManager(LoggerMixin):
     # Radiko 番組表API
     PROGRAM_API_BASE = "https://radiko.jp/v3/program/date"
     
-    def __init__(self, authenticator: RadikoAuthenticator):
+    def __init__(self, authenticator: RadikoAuthenticator = None):
         super().__init__()  # LoggerMixin初期化
-        self.authenticator = authenticator
+        self.authenticator = authenticator or RadikoAuthenticator()
         self.cache = ProgramCache()
         self.session = create_radiko_session()
     

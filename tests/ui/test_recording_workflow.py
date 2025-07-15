@@ -8,7 +8,7 @@ Tests the complete recording workflow integration including:
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from datetime import date, datetime
 import sys
 import os
@@ -74,7 +74,8 @@ class TestRecordingWorkflow:
         workflow.menu_manager.register_screen.assert_any_call("date_select", workflow.date_select_screen)
         workflow.menu_manager.register_screen.assert_any_call("program_select", workflow.program_select_screen)
     
-    def test_start_recording_workflow_success(self, workflow):
+    @pytest.mark.asyncio
+    async def test_start_recording_workflow_success(self, workflow):
         """Test successful recording workflow"""
         # Mock station selection
         mock_station = {"id": "TBS", "name": "TBSラジオ"}
@@ -88,11 +89,11 @@ class TestRecordingWorkflow:
         mock_program = {"id": "program_123", "title": "テスト番組"}
         workflow._run_program_selection = Mock(return_value=mock_program)
         
-        # Mock recording execution
-        workflow._execute_recording = Mock(return_value=True)
+        # Mock recording execution (async)
+        workflow._execute_recording = AsyncMock(return_value=True)
         
-        # Execute workflow
-        result = workflow.start_recording_workflow()
+        # Execute workflow (async)
+        result = await workflow.start_recording_workflow()
         
         # Verify workflow execution
         assert result is True
@@ -106,13 +107,14 @@ class TestRecordingWorkflow:
         workflow._run_program_selection.assert_called_once()
         workflow._execute_recording.assert_called_once()
     
-    def test_start_recording_workflow_cancelled_at_station(self, workflow):
+    @pytest.mark.asyncio
+    async def test_start_recording_workflow_cancelled_at_station(self, workflow):
         """Test workflow cancellation at station selection"""
         # Mock cancelled station selection
         workflow._run_station_selection = Mock(return_value=None)
         
-        # Execute workflow
-        result = workflow.start_recording_workflow()
+        # Execute workflow (async)
+        result = await workflow.start_recording_workflow()
         
         # Verify cancellation
         assert result is False
@@ -123,7 +125,8 @@ class TestRecordingWorkflow:
         # Verify only station selection was called
         workflow._run_station_selection.assert_called_once()
     
-    def test_start_recording_workflow_cancelled_at_date(self, workflow):
+    @pytest.mark.asyncio
+    async def test_start_recording_workflow_cancelled_at_date(self, workflow):
         """Test workflow cancellation at date selection"""
         # Mock successful station selection
         mock_station = {"id": "TBS", "name": "TBSラジオ"}
@@ -132,8 +135,8 @@ class TestRecordingWorkflow:
         # Mock cancelled date selection
         workflow._run_date_selection = Mock(return_value=None)
         
-        # Execute workflow
-        result = workflow.start_recording_workflow()
+        # Execute workflow (async)
+        result = await workflow.start_recording_workflow()
         
         # Verify cancellation
         assert result is False
@@ -145,7 +148,8 @@ class TestRecordingWorkflow:
         workflow._run_station_selection.assert_called_once()
         workflow._run_date_selection.assert_called_once()
     
-    def test_start_recording_workflow_cancelled_at_program(self, workflow):
+    @pytest.mark.asyncio
+    async def test_start_recording_workflow_cancelled_at_program(self, workflow):
         """Test workflow cancellation at program selection"""
         # Mock successful station selection
         mock_station = {"id": "TBS", "name": "TBSラジオ"}
@@ -158,8 +162,8 @@ class TestRecordingWorkflow:
         # Mock cancelled program selection
         workflow._run_program_selection = Mock(return_value=None)
         
-        # Execute workflow
-        result = workflow.start_recording_workflow()
+        # Execute workflow (async)
+        result = await workflow.start_recording_workflow()
         
         # Verify cancellation
         assert result is False
@@ -172,7 +176,8 @@ class TestRecordingWorkflow:
         workflow._run_date_selection.assert_called_once()
         workflow._run_program_selection.assert_called_once()
     
-    def test_start_recording_workflow_recording_failed(self, workflow):
+    @pytest.mark.asyncio
+    async def test_start_recording_workflow_recording_failed(self, workflow):
         """Test workflow with recording failure"""
         # Mock successful selections
         mock_station = {"id": "TBS", "name": "TBSラジオ"}
@@ -184,11 +189,11 @@ class TestRecordingWorkflow:
         mock_program = {"id": "program_123", "title": "テスト番組"}
         workflow._run_program_selection = Mock(return_value=mock_program)
         
-        # Mock recording failure
-        workflow._execute_recording = Mock(return_value=False)
+        # Mock recording failure (async)
+        workflow._execute_recording = AsyncMock(return_value=False)
         
-        # Execute workflow
-        result = workflow.start_recording_workflow()
+        # Execute workflow (async)
+        result = await workflow.start_recording_workflow()
         
         # Verify failure
         assert result is False
@@ -202,13 +207,14 @@ class TestRecordingWorkflow:
         workflow._run_program_selection.assert_called_once()
         workflow._execute_recording.assert_called_once()
     
-    def test_start_recording_workflow_exception_handling(self, workflow):
+    @pytest.mark.asyncio
+    async def test_start_recording_workflow_exception_handling(self, workflow):
         """Test workflow exception handling"""
         # Mock station selection to raise exception
         workflow._run_station_selection = Mock(side_effect=Exception("Test error"))
         
-        # Execute workflow
-        result = workflow.start_recording_workflow()
+        # Execute workflow (async)
+        result = await workflow.start_recording_workflow()
         
         # Verify exception handling
         assert result is False
@@ -263,3 +269,17 @@ class TestRecordingWorkflow:
         # Test complete state
         workflow.selected_program = {"id": "program_123", "title": "テスト番組"}
         assert workflow.is_workflow_complete()
+        
+    def test_run_sync_wrapper(self, workflow):
+        """Test synchronous wrapper for async workflow"""
+        # Mock async start_recording_workflow
+        async def mock_workflow():
+            return True
+        
+        workflow.start_recording_workflow = mock_workflow
+        
+        # Test sync wrapper
+        result = workflow.run_sync()
+        
+        # Verify result
+        assert result is True
