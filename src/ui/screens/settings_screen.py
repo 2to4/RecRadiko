@@ -23,6 +23,7 @@ from src.ui.screen_base import ScreenBase
 from src.ui.services.ui_service import UIService
 from src.region_mapper import RegionMapper
 from src.utils.base import LoggerMixin
+from src.utils.config_utils import ConfigManager
 
 
 class SettingType(Enum):
@@ -47,192 +48,7 @@ class SettingItem:
     options: Optional[List[str]] = None
     validator: Optional[Callable] = None
 
-
-class ConfigManager(LoggerMixin):
-    """Configuration file management with real file operations"""
-    
-    DEFAULT_CONFIG = {
-        "version": "2.0",
-        "prefecture": "東京",
-        "audio": {
-            "format": "mp3",
-            "bitrate": 256,
-            "sample_rate": 48000
-        },
-        "recording": {
-            "save_path": "~/Downloads/RecRadiko/",
-            "id3_tags_enabled": True,
-            "timeout_seconds": 30,
-            "max_retries": 3
-        },
-        "notification": {
-            "type": "macos_standard",
-            "enabled": True
-        },
-        "system": {
-            "log_level": "INFO",
-            "user_agent": "RecRadiko/2.0"
-        }
-    }
-    
-    def __init__(self, config_file: str = "~/.recradiko/config.json"):
-        super().__init__()
-        self.config_file = Path(config_file).expanduser()
-        self.config_data: Dict[str, Any] = {}
-        # Don't auto-load in constructor to allow setting config_file first
-        # self.load_config()
-    
-    def load_config(self) -> Dict[str, Any]:
-        """Load configuration from file"""
-        try:
-            if self.config_file.exists():
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    self.config_data = json.load(f)
-                    self.logger.info(f"Configuration loaded from {self.config_file}")
-            else:
-                # Create default config
-                self.config_data = self.DEFAULT_CONFIG.copy()
-                self._ensure_config_directory()
-                self.save_config()
-                self.logger.info(f"Created default configuration at {self.config_file}")
-        except (json.JSONDecodeError, IOError) as e:
-            self.logger.error(f"Error loading config: {e}")
-            # Fall back to defaults
-            self.config_data = self.DEFAULT_CONFIG.copy()
-            self._ensure_config_directory()
-            try:
-                self.save_config()
-            except Exception:
-                # If save fails, continue with defaults in memory
-                pass
-        
-        return self.config_data
-    
-    def save_config(self) -> bool:
-        """Save configuration to file"""
-        try:
-            self._ensure_config_directory()
-            
-            # Add timestamp
-            self.config_data["updated_at"] = datetime.now().isoformat()
-            
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(self.config_data, f, indent=2, ensure_ascii=False)
-            
-            self.logger.info(f"Configuration saved to {self.config_file}")
-            return True
-        except IOError as e:
-            self.logger.error(f"Error saving config: {e}")
-            return False
-    
-    def get_setting(self, key: str, default: Any = None) -> Any:
-        """Get setting value using dot notation"""
-        keys = key.split('.')
-        value = self.config_data
-        
-        try:
-            for k in keys:
-                value = value[k]
-            return value
-        except (KeyError, TypeError):
-            return default
-    
-    def set_setting(self, key: str, value: Any) -> None:
-        """Set setting value using dot notation"""
-        keys = key.split('.')
-        target = self.config_data
-        
-        # Navigate to parent
-        for k in keys[:-1]:
-            if k not in target:
-                target[k] = {}
-            target = target[k]
-        
-        # Set final value
-        target[keys[-1]] = value
-        self.logger.debug(f"Setting {key} = {value}")
-    
-    def reset_to_defaults(self) -> bool:
-        """Reset configuration to defaults"""
-        try:
-            self.config_data = self.DEFAULT_CONFIG.copy()
-            return self.save_config()
-        except Exception as e:
-            self.logger.error(f"Error resetting to defaults: {e}")
-            return False
-    
-    def export_settings(self, export_path: str) -> bool:
-        """Export settings to file"""
-        try:
-            export_file = Path(export_path)
-            export_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(export_file, 'w', encoding='utf-8') as f:
-                json.dump(self.config_data, f, indent=2, ensure_ascii=False)
-            
-            self.logger.info(f"Settings exported to {export_path}")
-            return True
-        except IOError as e:
-            self.logger.error(f"Error exporting settings: {e}")
-            return False
-    
-    def import_settings(self, import_path: str) -> bool:
-        """Import settings from file"""
-        try:
-            import_file = Path(import_path)
-            if not import_file.exists():
-                self.logger.error(f"Import file not found: {import_path}")
-                return False
-            
-            with open(import_file, 'r', encoding='utf-8') as f:
-                imported_data = json.load(f)
-            
-            # Validate imported data structure
-            if not isinstance(imported_data, dict):
-                self.logger.error("Invalid import file format")
-                return False
-            
-            # Merge with current config
-            self.config_data.update(imported_data)
-            result = self.save_config()
-            
-            if result:
-                self.logger.info(f"Settings imported from {import_path}")
-            
-            return result
-        except (json.JSONDecodeError, IOError) as e:
-            self.logger.error(f"Error importing settings: {e}")
-            return False
-    
-    def validate_config(self) -> Tuple[bool, List[str]]:
-        """Validate current configuration"""
-        errors = []
-        
-        # Check required keys
-        required_keys = ["prefecture", "audio", "recording", "notification"]
-        for key in required_keys:
-            if key not in self.config_data:
-                errors.append(f"Missing required key: {key}")
-        
-        # Validate prefecture
-        if "prefecture" in self.config_data:
-            region_mapper = RegionMapper()
-            if not region_mapper.get_area_id(self.config_data["prefecture"]):
-                errors.append("Invalid prefecture setting")
-        
-        # Validate audio settings
-        if "audio" in self.config_data:
-            audio = self.config_data["audio"]
-            if "format" in audio and audio["format"] not in ["mp3", "aac"]:
-                errors.append("Invalid audio format")
-            if "bitrate" in audio and not isinstance(audio["bitrate"], int):
-                errors.append("Invalid audio bitrate")
-        
-        return len(errors) == 0, errors
-    
-    def _ensure_config_directory(self) -> None:
-        """Ensure configuration directory exists"""
-        self.config_file.parent.mkdir(parents=True, exist_ok=True)
+# ConfigManagerクラスは統一設定管理（src/utils/config_utils.py）に移行しました
 
 
 class SettingValidator(LoggerMixin):
@@ -351,12 +167,37 @@ class SettingValidator(LoggerMixin):
 class SettingsScreen(ScreenBase):
     """Settings management screen with keyboard navigation"""
     
+    DEFAULT_CONFIG = {
+        "version": "2.0",
+        "prefecture": "東京",
+        "audio": {
+            "format": "mp3",
+            "bitrate": 256,
+            "sample_rate": 48000
+        },
+        "recording": {
+            "save_path": "~/Downloads/RecRadiko/",
+            "id3_tags_enabled": True,
+            "timeout_seconds": 30,
+            "max_retries": 3
+        },
+        "notification": {
+            "type": "macos_standard",
+            "enabled": True
+        },
+        "system": {
+            "log_level": "INFO",
+            "user_agent": "RecRadiko/2.0"
+        }
+    }
+    
     def __init__(self, config_file: str = "~/.recradiko/config.json"):
         super().__init__()
         self.set_title("設定管理")
-        self.config_file = config_file
-        self.config_manager = ConfigManager(config_file)
-        self.config_manager.load_config()  # Explicitly load config
+        self.config_file = Path(config_file).expanduser()
+        # 統一設定管理を使用
+        self.config_manager = ConfigManager(self.config_file)
+        self.config_data = self.config_manager.load_config(self.DEFAULT_CONFIG)
         self.region_mapper = RegionMapper()
         self.validator = SettingValidator()
         self.ui_service = UIService()
@@ -381,7 +222,7 @@ class SettingsScreen(ScreenBase):
     def load_settings(self) -> bool:
         """Load settings from configuration file"""
         try:
-            self.current_settings = self.config_manager.load_config()
+            self.current_settings = self.config_data.copy()
             self.setting_items = self._initialize_setting_items()
             self.logger.info("Settings loaded successfully")
             return True
@@ -392,11 +233,10 @@ class SettingsScreen(ScreenBase):
     def save_settings(self) -> bool:
         """Save current settings to configuration file"""
         try:
-            # Update config manager's data directly
-            self.config_manager.config_data = self.current_settings.copy()
-            
-            result = self.config_manager.save_config()
+            # 統一設定管理を使用して保存
+            result = self.config_manager.save_config(self.current_settings)
             if result:
+                self.config_data = self.current_settings.copy()
                 self.logger.info("Settings saved successfully")
             return result
         except Exception as e:
@@ -406,9 +246,11 @@ class SettingsScreen(ScreenBase):
     def reset_to_defaults(self) -> bool:
         """Reset settings to default values"""
         try:
-            result = self.config_manager.reset_to_defaults()
+            # デフォルト設定を設定
+            self.current_settings = self.DEFAULT_CONFIG.copy()
+            result = self.config_manager.save_config(self.current_settings)
             if result:
-                self.current_settings = self.config_manager.load_config()
+                self.config_data = self.current_settings.copy()
                 self.setting_items = self._initialize_setting_items()
                 self.logger.info("Settings reset to defaults")
             return result
@@ -418,19 +260,46 @@ class SettingsScreen(ScreenBase):
     
     def export_settings(self, export_path: str) -> bool:
         """Export settings to file"""
-        return self.config_manager.export_settings(export_path)
+        return self.config_manager.export_config(export_path, self.current_settings)
     
     def import_settings(self, import_path: str) -> bool:
         """Import settings from file"""
-        result = self.config_manager.import_settings(import_path)
-        if result:
-            self.current_settings = self.config_manager.load_config()
+        imported_config = self.config_manager.import_config(import_path)
+        if imported_config:
+            self.current_settings = imported_config
+            self.config_data = imported_config.copy()
             self.setting_items = self._initialize_setting_items()
-        return result
+            return True
+        return False
     
     def validate_all_settings(self) -> Tuple[bool, List[str]]:
         """Validate all current settings"""
-        return self.config_manager.validate_config()
+        return self._validate_config_data(self.current_settings)
+    
+    def _validate_config_data(self, config_data: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        """Validate configuration data"""
+        errors = []
+        
+        # Check required keys
+        required_keys = ["prefecture", "audio", "recording", "notification"]
+        for key in required_keys:
+            if key not in config_data:
+                errors.append(f"Missing required key: {key}")
+        
+        # Validate prefecture
+        if "prefecture" in config_data:
+            if not self.region_mapper.get_area_id(config_data["prefecture"]):
+                errors.append("Invalid prefecture setting")
+        
+        # Validate audio settings
+        if "audio" in config_data:
+            audio = config_data["audio"]
+            if "format" in audio and audio["format"] not in ["mp3", "aac"]:
+                errors.append("Invalid audio format")
+            if "bitrate" in audio and not isinstance(audio["bitrate"], int):
+                errors.append("Invalid audio bitrate")
+        
+        return len(errors) == 0, errors
     
     def run_settings_workflow(self) -> bool:
         """Run settings management workflow"""
@@ -469,34 +338,24 @@ class SettingsScreen(ScreenBase):
             return False
     
     def handle_region_setting(self) -> bool:
-        """Handle region setting change"""
+        """Handle region setting change using region selection screen"""
         try:
-            current_region = self.current_settings.get("prefecture", "東京")
-            self.ui_service.display_info(f"現在の地域: {current_region}")
+            from .region_select_screen import RegionSelectScreen
             
-            # Get new region input
-            new_region = self.ui_service.get_text_input("新しい地域を入力してください（例: 大阪、北海道）: ")
-            if not new_region:
-                return False
+            # 地域選択画面を起動
+            region_screen = RegionSelectScreen(str(self.config_file))
+            result = region_screen.run_region_selection_workflow()
             
-            # Validate region
-            is_valid, error = self.validator.validate_region(new_region)
-            if not is_valid:
-                self.ui_service.display_error(error)
-                return False
-            
-            # Get normalized prefecture name
-            area_id = self.region_mapper.get_area_id(new_region)
-            normalized_name = self.region_mapper.get_prefecture_name(area_id)
-            
-            # Confirm change
-            if self.ui_service.confirm_action(f"地域を「{normalized_name}」に変更しますか？"):
-                self.current_settings["prefecture"] = normalized_name
-                self.save_settings()
-                self.ui_service.display_success(f"地域を「{normalized_name}」に変更しました")
+            if result:
+                # 設定が変更された可能性があるので、設定を再読み込み
+                self.config_data = self.config_manager.load_config(self.DEFAULT_CONFIG)
+                self.current_settings = self.config_data.copy()
+                self.logger.info("地域設定画面から復帰、設定を再読み込み")
                 return True
+            else:
+                self.logger.info("地域設定画面がキャンセルされました")
+                return False
             
-            return False
         except Exception as e:
             self.logger.error(f"Region setting error: {e}")
             self.ui_service.display_error("地域設定の変更中にエラーが発生しました")

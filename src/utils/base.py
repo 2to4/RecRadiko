@@ -4,6 +4,8 @@
 共通機能を提供する基底クラスとMixin
 """
 
+import logging
+from typing import Any
 from src.logging_config import get_logger
 
 
@@ -19,6 +21,8 @@ class LoggerMixin:
                 # self.logger が利用可能
     """
     
-    def __init__(self):
+    logger: logging.Logger
+    
+    def __init__(self) -> None:
         """ロガーを自動初期化"""
         self.logger = get_logger(self.__class__.__module__)

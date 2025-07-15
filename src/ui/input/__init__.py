@@ -7,6 +7,7 @@ Provides cross-platform keyboard input handling with arrow key navigation suppor
 Supports Windows (msvcrt) and Unix/Linux (termios + tty) platforms.
 """
 
+from typing import List
 from .keyboard_handler import KeyboardHandler
 
-__all__ = ['KeyboardHandler']
+__all__: List[str] = ['KeyboardHandler']

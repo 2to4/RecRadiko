@@ -26,6 +26,7 @@ from .streaming import StreamingManager, StreamingError
 from .error_handler import ErrorHandler, handle_error
 from .logging_config import setup_logging
 from .utils.base import LoggerMixin
+from .utils.config_utils import ConfigManager
 from .region_mapper import RegionMapper
 from .timefree_recorder import TimeFreeRecorder
 from .program_history import ProgramHistoryManager
@@ -56,6 +57,8 @@ class RecRadikoCLI(LoggerMixin):
         # 警告フィルター設定（UserWarning抑制）
         self._setup_warning_filters()
         
+        # 統一設定管理を使用
+        self.config_manager = ConfigManager(self.config_path)
         self.config = self._load_config()
         
         # 詳細ログ設定
@@ -121,20 +124,10 @@ class RecRadikoCLI(LoggerMixin):
             "max_retries": 3
         }
         
-        try:
-            if self.config_path.exists():
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                default_config.update(config)
-                self._process_prefecture_setting(default_config)
-            else:
-                self._save_config(default_config)
-                
-            return default_config
-            
-        except Exception as e:
-            self.logger.error(f"設定ファイル読み込みエラー: {e}")
-            return default_config
+        # 統一設定管理を使用
+        config = self.config_manager.load_config(default_config)
+        self._process_prefecture_setting(config)
+        return config
     
     def _process_prefecture_setting(self, config: Dict[str, Any]) -> None:
         """都道府県名から地域IDを自動設定"""
@@ -218,14 +211,11 @@ class RecRadikoCLI(LoggerMixin):
                 "major_stations": []
             }
     
-    def _save_config(self, config: Dict[str, Any]):
+    def _save_config(self, config: Dict[str, Any] = None):
         """設定ファイルを保存"""
-        try:
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            self.logger.error(f"設定ファイル保存エラー: {e}")
+        if config is None:
+            config = self.config
+        self.config_manager.save_config(config)
     
     def _setup_logging(self, verbose=False):
         """ログ設定"""

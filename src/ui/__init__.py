@@ -8,5 +8,5 @@ This package provides keyboard navigation interface for RecRadiko timefree recor
 Replaces number input with arrow key navigation + Enter confirmation for modern UI.
 """
 
-__version__ = "2.0.0"
-__author__ = "RecRadiko Development Team"
+__version__: str = "2.0.0"
+__author__: str = "RecRadiko Development Team"

@@ -12,9 +12,11 @@ RecRadiko - Radikoの録音・録画を自動化するアプリケーション
 - cli: コマンドライン操作
 """
 
-__version__ = "1.0.0"
-__author__ = "Claude (Anthropic)"
-__license__ = "MIT"
+from typing import List
+
+__version__: str = "1.0.0"
+__author__: str = "Claude (Anthropic)"
+__license__: str = "MIT"
 
 # 主要クラスのインポート
 from .auth import RadikoAuthenticator, AuthInfo, LocationInfo, AuthenticationError
@@ -24,7 +26,7 @@ from .timefree_recorder import TimeFreeRecorder, TimeFreeError, RecordingResult
 from .error_handler import ErrorHandler, RecRadikoError, ErrorSeverity, ErrorCategory
 from .cli import RecRadikoCLI
 
-__all__ = [
+__all__: List[str] = [
     # 認証関連
     'RadikoAuthenticator',
     'AuthInfo',

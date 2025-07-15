@@ -10,7 +10,9 @@
       "Bash(find:*)",
       "Bash(python:*)",
       "Edit(docs/*)",
-      "Bash(gh pr create:*)"
+      "Bash(gh pr create:*)",
+      "Bash(sed:*)",
+      "Bash(mv:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
