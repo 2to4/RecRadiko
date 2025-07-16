@@ -704,18 +704,26 @@ class ProgramInfoManager(LoggerMixin):
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
             
-            # XMLを解析
-            root = ET.fromstring(response.text)
+            # UTF-8で正しくデコードしてXMLを解析
+            content = response.content.decode('utf-8', errors='replace')
+            root = ET.fromstring(content)
             stations = []
             
             for station in root.findall('.//station'):
-                station_id = station.get('id')
-                station_name = station.find('name').text if station.find('name') is not None else ''
+                # 子要素からIDと名前を取得
+                id_element = station.find('id')
+                name_element = station.find('name')
+                ascii_name_element = station.find('ascii_name')
+                
+                station_id = id_element.text if id_element is not None else None
+                station_name = name_element.text if name_element is not None else None
+                ascii_name = ascii_name_element.text if ascii_name_element is not None else None
                 
                 if station_id and station_name:
                     stations.append({
-                        'id': station_id,
-                        'name': station_name,
+                        'id': station_id.strip(),
+                        'name': station_name.strip(),
+                        'ascii_name': ascii_name.strip() if ascii_name else '',
                         'area_id': area_id
                     })
             

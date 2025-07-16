@@ -67,6 +67,15 @@ class UIService:
             return None
             
         return self.menu_items[self.current_selection]
+    
+    def get_selected_index(self) -> int:
+        """
+        Get the index of the currently selected item
+        
+        Returns:
+            Current selection index
+        """
+        return self.current_selection
         
     def display_menu_with_highlight(self) -> None:
         """Display menu with current selection highlighted"""

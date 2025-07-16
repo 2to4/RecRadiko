@@ -56,8 +56,6 @@ class TestSettingsScreenReal:
                 "sample_rate": 48000
             },
             "recording": {
-                "save_path": str(temp_config_dir / "recordings"),
-                "id3_tags_enabled": True,
                 "timeout_seconds": 30,
                 "max_retries": 3
             },
@@ -119,8 +117,8 @@ class TestSettingsScreenReal:
         settings_screen.load_settings()
         
         expected_setting_ids = [
-            "region", "audio_quality", "save_path", "id3_tags",
-            "notifications", "reset_defaults", "export_settings", "import_settings"
+            "region", "audio_quality",
+            "notifications", "reset_defaults", "export_settings", "import_settings", "back_to_main"
         ]
         
         setting_ids = [item.id for item in settings_screen.setting_items]
@@ -139,7 +137,6 @@ class TestSettingsScreenReal:
         assert settings_screen.current_settings["prefecture"] == "東京"
         assert settings_screen.current_settings["audio"]["format"] == "mp3"
         assert settings_screen.current_settings["audio"]["bitrate"] == 256
-        assert settings_screen.current_settings["recording"]["id3_tags_enabled"] == True
         
         # Verify file content matches
         with open(real_config_file, 'r', encoding='utf-8') as f:
@@ -405,7 +402,7 @@ class TestSettingsScreenReal:
         call_args = settings_screen.ui_service.set_menu_items.call_args[0][0]
         assert any("地域設定" in item for item in call_args)
         assert any("音質設定" in item for item in call_args)
-        assert any("保存先" in item for item in call_args)
+        assert any("通知設定" in item for item in call_args)
     
     def test_settings_workflow_execution(self, settings_screen):
         """Test complete settings workflow"""
@@ -440,47 +437,48 @@ class TestConfigManagerReal:
     
     def test_config_file_creation_and_loading(self, temp_config_dir):
         """Test config file creation and loading"""
-        from src.ui.screens.settings_screen import ConfigManager
+        from src.utils.config_utils import ConfigManager
         
         config_file = temp_config_dir / "config.json"
         
         # Create ConfigManager with non-existent file
         config_manager = ConfigManager(str(config_file))
-        config_manager.load_config()  # Explicitly load config
+        default_config = {"test": "value"}
+        config_manager.load_config(default_config)  # Load with defaults
         
         # Should create file with defaults
         assert config_file.exists()
-        assert config_manager.get_setting("prefecture") == "東京"
-        assert config_manager.get_setting("audio.format") == "mp3"
         
         # Verify file content
         with open(config_file, 'r', encoding='utf-8') as f:
             file_content = json.load(f)
         
-        assert file_content["prefecture"] == "東京"
-        assert file_content["audio"]["format"] == "mp3"
+        assert file_content["test"] == "value"
     
     def test_setting_modification_and_persistence(self, temp_config_dir):
         """Test setting modification and persistence"""
-        from src.ui.screens.settings_screen import ConfigManager
+        from src.utils.config_utils import ConfigManager
         
         config_file = temp_config_dir / "config.json"
         config_manager = ConfigManager(str(config_file))
-        config_manager.load_config()  # Explicitly load config
+        
+        # Load default config
+        default_config = {"prefecture": "東京", "audio": {"bitrate": 256}}
+        config = config_manager.load_config(default_config)
         
         # Modify settings
-        config_manager.set_setting("prefecture", "大阪")
-        config_manager.set_setting("audio.bitrate", 320)
+        config["prefecture"] = "大阪"
+        config["audio"]["bitrate"] = 320
         
         # Save
-        result = config_manager.save_config()
+        result = config_manager.save_config(config)
         assert result == True
         
         # Verify with new instance
         new_config_manager = ConfigManager(str(config_file))
-        new_config_manager.load_config()  # Explicitly load config
-        assert new_config_manager.get_setting("prefecture") == "大阪"
-        assert new_config_manager.get_setting("audio.bitrate") == 320
+        loaded_config = new_config_manager.load_config(default_config)
+        assert loaded_config["prefecture"] == "大阪"
+        assert loaded_config["audio"]["bitrate"] == 320
         
         # Verify file content
         with open(config_file, 'r', encoding='utf-8') as f:
