@@ -113,29 +113,14 @@ class TestMainMenuScreen:
         mock_keyboard_handler.get_key.assert_called_once()
         assert result is None  # Stay on main menu
         
-    def test_handle_menu_selection_exit(self, main_menu_screen, mock_ui_service):
-        """Test handling '終了' selection"""
+    def test_handle_menu_selection_exit_without_confirmation(self, main_menu_screen, mock_ui_service):
+        """Test handling '終了' selection - exits immediately without confirmation"""
         main_menu_screen.ui_service = mock_ui_service
         
-        with patch.object(main_menu_screen, 'confirm_exit') as mock_confirm_exit:
-            mock_confirm_exit.return_value = True
-            
-            result = main_menu_screen.handle_menu_selection("終了")
-            
-            mock_confirm_exit.assert_called_once()
-            assert result == "exit"
-            
-    def test_handle_menu_selection_exit_cancelled(self, main_menu_screen, mock_ui_service):
-        """Test handling '終了' selection when cancelled"""
-        main_menu_screen.ui_service = mock_ui_service
+        result = main_menu_screen.handle_menu_selection("終了")
         
-        with patch.object(main_menu_screen, 'confirm_exit') as mock_confirm_exit:
-            mock_confirm_exit.return_value = False
-            
-            result = main_menu_screen.handle_menu_selection("終了")
-            
-            mock_confirm_exit.assert_called_once()
-            assert result is None  # Stay on main menu
+        # Should return "exit" immediately without calling confirm_exit
+        assert result == "exit"
             
     def test_handle_menu_selection_unknown(self, main_menu_screen, mock_ui_service):
         """Test handling unknown selection"""

@@ -166,8 +166,6 @@ class SettingsScreen(ScreenBase):
             "sample_rate": 48000
         },
         "recording": {
-            "save_path": "~/Downloads/RecRadiko/",
-            "id3_tags_enabled": True,
             "timeout_seconds": 30,
             "max_retries": 3
         },
@@ -177,13 +175,13 @@ class SettingsScreen(ScreenBase):
         }
     }
     
-    def __init__(self, config_file: str = "~/.recradiko/config.json"):
+    def __init__(self, config_file: str = "config.json"):
         super().__init__()
         self.set_title("設定管理")
         self.config_file = Path(config_file).expanduser()
         # 統一設定管理を使用
         self.config_manager = ConfigManager(self.config_file)
-        self.config_data = self.config_manager.load_config(self.DEFAULT_CONFIG)
+        self.config_data = self.config_manager.load_config({})
         self.region_mapper = RegionMapper()
         self.validator = SettingValidator()
         self.ui_service = UIService()
@@ -298,21 +296,26 @@ class SettingsScreen(ScreenBase):
                 if selected_option is None:
                     break
                 
-                # Handle selection
-                if selected_option == "地域設定":
-                    self.handle_region_setting()
-                elif selected_option == "音質設定":
-                    self.handle_audio_quality_setting()
-                elif selected_option == "保存先":
-                    self.handle_save_path_setting()
-                elif selected_option == "録音後処理":
-                    self.handle_id3_tags_setting()
-                elif selected_option == "設定をデフォルトに戻す":
-                    self.handle_reset_defaults()
-                elif selected_option == "設定ファイルエクスポート":
-                    self.handle_export_settings()
-                elif selected_option == "設定ファイルインポート":
-                    self.handle_import_settings()
+                # Get the selected index to find the corresponding setting item
+                selected_index = self.ui_service.get_selected_index()
+                if selected_index < len(self.setting_items):
+                    selected_item = self.setting_items[selected_index]
+                    
+                    # Handle selection based on setting ID
+                    if selected_item.id == "region":
+                        self.handle_region_setting()
+                    elif selected_item.id == "audio_quality":
+                        self.handle_audio_quality_setting()
+                    elif selected_item.id == "reset_defaults":
+                        self.handle_reset_defaults()
+                    elif selected_item.id == "export_settings":
+                        self.handle_export_settings()
+                    elif selected_item.id == "import_settings":
+                        self.handle_import_settings()
+                    elif selected_item.id == "back_to_main":
+                        break  # メインメニューに戻る
+                    else:
+                        break
                 else:
                     break
             
@@ -332,7 +335,7 @@ class SettingsScreen(ScreenBase):
             
             if result:
                 # 設定が変更された可能性があるので、設定を再読み込み
-                self.config_data = self.config_manager.load_config(self.DEFAULT_CONFIG)
+                self.config_data = self.config_manager.load_config({})
                 self.current_settings = self.config_data.copy()
                 self.logger.info("地域設定画面から復帰、設定を再読み込み")
                 return True
@@ -346,22 +349,29 @@ class SettingsScreen(ScreenBase):
             return False
     
     def handle_audio_quality_setting(self) -> bool:
-        """Handle audio quality setting change"""
-        # Implementation placeholder
-        self.ui_service.display_info("音質設定機能は実装中です")
-        return False
+        """Handle audio quality setting change using audio quality selection screen"""
+        try:
+            from .audio_quality_screen import AudioQualityScreen
+            
+            # 音質設定画面を起動
+            audio_screen = AudioQualityScreen(str(self.config_file))
+            result = audio_screen.run_audio_quality_workflow()
+            
+            if result:
+                # 設定が変更された可能性があるので、設定を再読み込み
+                self.config_data = self.config_manager.load_config({})
+                self.current_settings = self.config_data.copy()
+                self.logger.info("音質設定画面から復帰、設定を再読み込み")
+                return True
+            else:
+                self.logger.info("音質設定画面がキャンセルされました")
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"Audio quality setting error: {e}")
+            self.ui_service.display_error("音質設定の変更中にエラーが発生しました")
+            return False
     
-    def handle_save_path_setting(self) -> bool:
-        """Handle save path setting change"""
-        # Implementation placeholder
-        self.ui_service.display_info("保存先設定機能は実装中です")
-        return False
-    
-    def handle_id3_tags_setting(self) -> bool:
-        """Handle ID3 tags setting change"""
-        # Implementation placeholder
-        self.ui_service.display_info("ID3タグ設定機能は実装中です")
-        return False
     
     
     def handle_reset_defaults(self) -> bool:
@@ -420,22 +430,6 @@ class SettingsScreen(ScreenBase):
                 options=["MP3 128kbps, 44kHz", "MP3 256kbps, 48kHz", "AAC 128kbps, 44kHz", "AAC 256kbps, 48kHz"]
             ),
             SettingItem(
-                id="save_path",
-                title="保存先",
-                description="録音ファイルの保存先",
-                current_value=self._get_current_save_path(),
-                default_value="~/Downloads/RecRadiko/",
-                setting_type=SettingType.FILE_PATH
-            ),
-            SettingItem(
-                id="id3_tags",
-                title="録音後処理",
-                description="ID3タグの自動付与",
-                current_value=self._get_current_id3_setting(),
-                default_value=True,
-                setting_type=SettingType.BOOLEAN
-            ),
-            SettingItem(
                 id="reset_defaults",
                 title="設定をデフォルトに戻す",
                 description="全設定を初期値に戻す",
@@ -458,6 +452,14 @@ class SettingsScreen(ScreenBase):
                 current_value=None,
                 default_value=None,
                 setting_type=SettingType.ACTION
+            ),
+            SettingItem(
+                id="back_to_main",
+                title="メインメニューに戻る",
+                description="設定画面を終了してメインメニューに戻る",
+                current_value=None,
+                default_value=None,
+                setting_type=SettingType.ACTION
             )
         ]
     
@@ -473,13 +475,4 @@ class SettingsScreen(ScreenBase):
         sample_rate = audio.get("sample_rate", 48000) // 1000
         return f"{format_type} {bitrate}kbps, {sample_rate}kHz"
     
-    def _get_current_save_path(self) -> str:
-        """Get current save path display"""
-        recording = self.current_settings.get("recording", {})
-        return recording.get("save_path", "~/Downloads/RecRadiko/")
-    
-    def _get_current_id3_setting(self) -> bool:
-        """Get current ID3 tags setting"""
-        recording = self.current_settings.get("recording", {})
-        return recording.get("id3_tags_enabled", True)
     

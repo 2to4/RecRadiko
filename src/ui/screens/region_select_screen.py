@@ -61,139 +61,16 @@ class RegionSelectScreen(ScreenBase):
         
         return regions
     
+    def display_header(self) -> None:
+        """画面ヘッダーを表示"""
+        print(f"\n=== {self.title} ===")
+        print()
+    
     def display_content(self) -> None:
-        """画面コンテンツを表示"""
-        if self.current_view == "region_list":
-            self._display_region_list()
-        else:
-            self._display_prefecture_list()
-    
-    def _display_region_list(self) -> None:
-        """地方一覧を表示"""
-        print("\n📍 地域を選択してください")
-        print("=" * 50)
-        
-        # 現在の設定を表示
-        current_config = self.config_manager.load_config({})
-        current_area_id = current_config.get("area_id", "JP13")
-        current_region_info = self.region_mapper.get_region_info(current_area_id)
-        
-        if current_region_info:
-            print(f"現在の設定: {current_region_info.prefecture_ja} ({current_area_id})")
-            print("")
-        
-        # 地方一覧を表示
-        region_names = list(self.regions_by_area.keys())
-        region_names.sort()  # 地方名でソート
-        
-        menu_items = []
-        for region_name in region_names:
-            prefecture_count = len(self.regions_by_area[region_name])
-            menu_items.append(f"{region_name} ({prefecture_count}都道府県)")
-        
-        menu_items.append("🔙 設定画面に戻る")
-        
-        self.ui_service.set_menu_items(menu_items)
-        self.ui_service.display_menu_with_highlight()
-        
-        print("\n操作方法:")
-        print("↑↓キー: 地方選択")
-        print("Enter: 地方内の都道府県を表示")
-        print("ESC: 設定画面に戻る")
-    
-    def _display_prefecture_list(self) -> None:
-        """選択された地方の都道府県一覧を表示"""
-        if not self.selected_region_name:
-            return
-        
-        print(f"\n📍 {self.selected_region_name}の都道府県を選択してください")
-        print("=" * 50)
-        
-        # 現在の設定を表示
-        current_config = self.config_manager.load_config({})
-        current_area_id = current_config.get("area_id", "JP13")
-        current_region_info = self.region_mapper.get_region_info(current_area_id)
-        
-        if current_region_info:
-            print(f"現在の設定: {current_region_info.prefecture_ja} ({current_area_id})")
-            print("")
-        
-        # 都道府県一覧を表示
-        prefectures = self.regions_by_area[self.selected_region_name]
-        menu_items = []
-        
-        for prefecture_name, area_id in prefectures:
-            # 現在の設定にマーク
-            if area_id == current_area_id:
-                menu_items.append(f"{prefecture_name} ({area_id}) ← 現在の設定")
-            else:
-                menu_items.append(f"{prefecture_name} ({area_id})")
-        
-        menu_items.append("🔙 地方一覧に戻る")
-        
-        self.ui_service.set_menu_items(menu_items)
-        self.ui_service.display_menu_with_highlight()
-        
-        print("\n操作方法:")
-        print("↑↓キー: 都道府県選択")
-        print("Enter: この都道府県に設定")
-        print("ESC: 地方一覧に戻る")
-    
-    def handle_input(self, key: str) -> Optional[str]:
-        """キー入力処理"""
-        if key == "escape":
-            if self.current_view == "prefecture_list":
-                # 都道府県一覧から地方一覧へ戻る
-                self.current_view = "region_list"
-                self.selected_region_name = None
-                return "refresh"
-            else:
-                # 地方一覧から設定画面へ戻る
-                return "back"
-        
-        elif key == "enter":
-            if self.current_view == "region_list":
-                return self._handle_region_selection()
-            else:
-                return self._handle_prefecture_selection()
-        
-        elif key in ["up", "down"]:
-            self.ui_service.handle_navigation(key)
-            return "refresh"
-        
-        return None
-    
-    def _handle_region_selection(self) -> Optional[str]:
-        """地方選択の処理"""
-        selected_index = self.ui_service.get_selected_index()
-        region_names = list(self.regions_by_area.keys())
-        region_names.sort()
-        
-        if selected_index < len(region_names):
-            # 地方選択 → 都道府県一覧へ
-            self.selected_region_name = region_names[selected_index]
-            self.current_view = "prefecture_list"
-            self.ui_service.reset_selection()  # 選択位置をリセット
-            return "refresh"
-        else:
-            # 「戻る」選択
-            return "back"
-    
-    def _handle_prefecture_selection(self) -> Optional[str]:
-        """都道府県選択の処理"""
-        selected_index = self.ui_service.get_selected_index()
-        prefectures = self.regions_by_area[self.selected_region_name]
-        
-        if selected_index < len(prefectures):
-            # 都道府県選択 → 設定更新
-            prefecture_name, area_id = prefectures[selected_index]
-            return self._update_region_setting(prefecture_name, area_id)
-        else:
-            # 「戻る」選択
-            self.current_view = "region_list"
-            self.selected_region_name = None
-            self.ui_service.reset_selection()
-            return "refresh"
+        """画面コンテンツを表示（継承要求のため維持、実際はワークフローで使用しない）"""
+        # このメソッドは使用されません。
+        # 実際の表示は_display_current_info()と_setup_menu_items()で行います。
+        pass
     
     def _update_region_setting(self, prefecture_name: str, area_id: str) -> str:
         """地域設定を更新"""
@@ -221,7 +98,7 @@ class RegionSelectScreen(ScreenBase):
                 import time
                 time.sleep(1.5)
                 
-                return "back"
+                return "success"
             else:
                 self.logger.error(f"地域設定保存失敗: {prefecture_name}({area_id})")
                 print(f"\n❌ 設定の保存に失敗しました")
@@ -242,32 +119,126 @@ class RegionSelectScreen(ScreenBase):
             
             return "back"
     
+    def _handle_selection(self, selected_option: str) -> str:
+        """選択項目に基づく処理"""
+        if selected_option == "🔙 設定画面に戻る":
+            return "back"
+        
+        if self.current_view == "region_list":
+            # 地方選択の処理
+            if selected_option.endswith("都道府県)"):
+                # 地方名を抽出
+                region_name = selected_option.split(" (")[0]
+                self.selected_region_name = region_name
+                self.current_view = "prefecture_list"
+                return "continue"
+            else:
+                return "back"
+        
+        elif self.current_view == "prefecture_list":
+            # 都道府県選択の処理
+            if selected_option == "🔙 地方一覧に戻る":
+                self.current_view = "region_list"
+                self.selected_region_name = None
+                return "continue"
+            else:
+                # 都道府県が選択された
+                # "県名 (JP##)" または "県名 (JP##) ← 現在の設定" の形式
+                prefecture_info = selected_option.split(" (")[0]
+                area_id_part = selected_option.split(" (")[1].split(")")[0]
+                
+                return self._update_region_setting(prefecture_info, area_id_part)
+        
+        return "continue"
+    
+    def _display_current_info(self) -> None:
+        """現在の設定情報とナビゲーション情報を表示"""
+        if self.current_view == "region_list":
+            print("\n📍 地域を選択してください")
+        else:
+            print(f"\n📍 {self.selected_region_name}の都道府県を選択してください")
+        
+        print("=" * 50)
+        
+        # 現在の設定を表示
+        current_config = self.config_manager.load_config({})
+        current_area_id = current_config.get("area_id", "JP13")
+        current_region_info = self.region_mapper.get_region_info(current_area_id)
+        
+        if current_region_info:
+            print(f"現在の設定: {current_region_info.prefecture_ja} ({current_area_id})")
+            print("")
+    
+    def _setup_menu_items(self) -> None:
+        """現在のビューに応じてメニューアイテムを設定"""
+        if self.current_view == "region_list":
+            # 地方一覧を設定
+            region_names = list(self.regions_by_area.keys())
+            region_names.sort()
+            
+            menu_items = []
+            for region_name in region_names:
+                prefecture_count = len(self.regions_by_area[region_name])
+                menu_items.append(f"{region_name} ({prefecture_count}都道府県)")
+            
+            menu_items.append("🔙 設定画面に戻る")
+            self.ui_service.set_menu_items(menu_items)
+            
+        else:
+            # 都道府県一覧を設定
+            prefectures = self.regions_by_area[self.selected_region_name]
+            current_config = self.config_manager.load_config({})
+            current_area_id = current_config.get("area_id", "JP13")
+            
+            menu_items = []
+            for prefecture_name, area_id in prefectures:
+                if area_id == current_area_id:
+                    menu_items.append(f"{prefecture_name} ({area_id}) ← 現在の設定")
+                else:
+                    menu_items.append(f"{prefecture_name} ({area_id})")
+            
+            menu_items.append("🔙 地方一覧に戻る")
+            self.ui_service.set_menu_items(menu_items)
+    
     def run_region_selection_workflow(self) -> bool:
         """地域選択ワークフローを実行"""
         try:
             self.logger.info("地域選択画面開始")
             
             while True:
-                # 画面をクリア
-                os.system('clear' if os.name == 'posix' else 'cls')
-                
-                # ヘッダー表示
+                # ヘッダー情報を表示（UIServiceによるメニュー表示前に）
+                print('\033[2J\033[H', end='')  # 画面クリア
                 self.display_header()
+                self._display_current_info()
                 
-                # コンテンツ表示
-                self.display_content()
+                # メニューアイテムを設定
+                self._setup_menu_items()
                 
-                # キー入力待ち
-                key = self.ui_service.get_key_input()
+                # ユーザー選択を取得（UIServiceが標準的なメニュー表示を行う）
+                selected_option = self.ui_service.get_user_selection()
                 
-                # キー入力処理
-                result = self.handle_input(key)
+                if selected_option is None:
+                    # Escapeキーまたはキャンセル
+                    if self.current_view == "prefecture_list":
+                        # 都道府県一覧から地方一覧へ戻る
+                        self.current_view = "region_list"
+                        self.selected_region_name = None
+                        continue
+                    else:
+                        # 地方一覧から設定画面へ戻る
+                        self.logger.info("地域選択画面終了")
+                        return False
                 
-                if result == "back":
-                    self.logger.info("地域選択画面終了")
+                # 選択に基づく処理
+                result = self._handle_selection(selected_option)
+                
+                if result == "success":
+                    self.logger.info("地域設定更新完了")
                     return True
-                elif result == "refresh":
-                    continue  # 画面再描画
+                elif result == "back":
+                    self.logger.info("地域選択画面終了")
+                    return False
+                # "continue"の場合は画面再描画
                 
         except KeyboardInterrupt:
             print("\n\n地域選択をキャンセルしました")

@@ -35,10 +35,7 @@ class MainMenuScreen(ScreenBase):
         self.set_title("RecRadiko - メインメニュー")
         self.menu_options = [
             "番組を録音する",
-            "番組を検索する",
-            "録音履歴を表示", 
             "設定を変更",
-            "システム情報を表示",
             "ヘルプを表示",
             "終了"
         ]
@@ -87,21 +84,9 @@ class MainMenuScreen(ScreenBase):
             self.start_recording_flow()
             return "station_select"
             
-        elif selection == "番組を検索する":
-            self.logger.info("Navigating to search screen")
-            return "search"
-            
-        elif selection == "録音履歴を表示":
-            self.show_recording_history()
-            return None  # Stay on main menu
-            
         elif selection == "設定を変更":
             self.show_settings()
             return "settings"
-            
-        elif selection == "システム情報を表示":
-            self.show_system_info()
-            return "system_info"
             
         elif selection == "ヘルプを表示":
             self.ui_service.display_help()
@@ -120,9 +105,7 @@ class MainMenuScreen(ScreenBase):
             return None  # Stay on main menu
             
         elif selection == "終了":
-            if self.confirm_exit():
-                return "exit"
-            return None  # Stay on main menu if cancelled
+            return "exit"
             
         else:
             self.ui_service.display_error(f"未知の選択: {selection}")
@@ -133,42 +116,10 @@ class MainMenuScreen(ScreenBase):
         print("\n録音ワークフローを開始します...")
         print("放送局選択画面に移動します。")
         
-    def show_recording_history(self) -> None:
-        """Show recording history"""
-        print("\n録音履歴")
-        print("=" * 20)
-        
-        # Check for recordings directory and files
-        recordings_dir = "recordings"
-        if os.path.exists(recordings_dir):
-            try:
-                recordings = [f for f in os.listdir(recordings_dir) 
-                            if f.endswith(('.mp3', '.aac', '.m4a'))]
-                
-                if recordings:
-                    print(f"\n録音ファイル数: {len(recordings)}個")
-                    print("\n最近の録音:")
-                    for i, recording in enumerate(recordings[-5:], 1):  # Show last 5
-                        print(f"  {i}. {recording}")
-                else:
-                    print("\n録音ファイルはありません。")
-                    
-            except Exception as e:
-                self.ui_service.display_error(f"録音履歴の読み込みエラー: {e}")
-        else:
-            print("\n録音ディレクトリが見つかりません。")
-            print("まだ録音を行っていないようです。")
-            
-        print("\n任意のキーを押して続行...")
-        self.ui_service.keyboard_handler.get_key()
         
     def show_settings(self) -> None:
         """Show settings (prepare for navigation to settings screen)"""
         print("\n設定画面に移動します...")
-        
-    def show_system_info(self) -> None:
-        """Show system info (prepare for navigation to system info screen)"""
-        print("\nシステム情報画面に移動します...")
         
     def confirm_exit(self) -> bool:
         """
@@ -197,12 +148,8 @@ class MainMenuScreen(ScreenBase):
         
         if current_item == "番組を録音する":
             return "放送局 → 日付 → 番組の順で選択して録音を開始します"
-        elif current_item == "録音履歴を表示":
-            return "これまでに録音したファイルの一覧を表示します"
         elif current_item == "設定を変更":
             return "地域設定、品質設定などを変更できます"
-        elif current_item == "システム情報を表示":
-            return "システム状態、録音統計、ログ情報を表示します"
         elif current_item == "ヘルプを表示":
             return "キーボード操作方法と使用手順を表示します"
         elif current_item == "終了":
