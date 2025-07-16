@@ -545,6 +545,9 @@ class TimeFreeRecorder(LoggerMixin):
                 
             # プログレスバーを表示
             last_time = 0
+            last_update_time = 0
+            no_progress_count = 0
+            
             while process.returncode is None:
                 try:
                     # プログレスファイルを読み込む
@@ -553,15 +556,36 @@ class TimeFreeRecorder(LoggerMixin):
                             content = f.read()
                             current_time = self._parse_ffmpeg_progress(content)
                             
+                            # プログレスが更新された場合
                             if current_time > last_time:
                                 if progress_bar:
                                     # 進捗の差分を更新
-                                    progress_bar.update(int(current_time - last_time))
+                                    diff = int(current_time - last_time)
+                                    progress_bar.update(diff)
+                                    
+                                    # 大きなジャンプの場合は補正
+                                    if diff > duration * 0.1:  # 全体の10%以上のジャンプ
+                                        self.logger.warning(f"プログレスバーの大きなジャンプを検出: {diff}秒")
+                                        
                                 last_time = current_time
-                except Exception:
-                    pass
+                                last_update_time = current_time
+                                no_progress_count = 0
+                            else:
+                                no_progress_count += 1
+                                
+                                # プログレスが長時間更新されない場合の警告
+                                if no_progress_count > 10:
+                                    self.logger.warning(f"プログレスが{no_progress_count}秒間更新されていません")
+                    
+                    # デバッグ情報を定期的に出力
+                    if duration > 0:
+                        progress_percent = (current_time / duration) * 100
+                        self.logger.debug(f"FFmpeg進捗: {current_time:.1f}/{duration:.1f}秒 ({progress_percent:.1f}%)")
+                        
+                except Exception as e:
+                    self.logger.debug(f"プログレス読み取りエラー: {e}")
                 
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(1.0)  # 1秒間隔で更新
                 
             # プログレスバーを完了
             if progress_bar:
@@ -620,13 +644,19 @@ class TimeFreeRecorder(LoggerMixin):
             現在時刻（秒）
         """
         try:
-            # out_time_msフィールドを検索
+            # 最新のout_time_msを取得（複数行ある場合は最後の値）
+            current_time = 0.0
             for line in content.split('\n'):
+                line = line.strip()
                 if line.startswith('out_time_ms='):
-                    time_ms = int(line.split('=')[1])
-                    return time_ms / 1000000.0  # マイクロ秒を秒に変換
-            return 0.0
-        except Exception:
+                    try:
+                        time_ms = int(line.split('=')[1])
+                        current_time = time_ms / 1000000.0  # マイクロ秒を秒に変換
+                    except ValueError:
+                        continue
+            return current_time
+        except Exception as e:
+            self.logger.debug(f"プログレス解析エラー: {e}")
             return 0.0
     
     
