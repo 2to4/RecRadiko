@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Any
 import aiohttp
+import sys
 # import aiofiles  # 必要に応じて後で追加
 from dataclasses import dataclass
 
@@ -467,16 +468,23 @@ class TimeFreeRecorder(LoggerMixin):
                 codec = 'libmp3lame'
                 extra_args = ['-b:a', '256k']
             
+            # プログレス情報を取得するためのパイプを作成
+            import tempfile
+            progress_fd, progress_path = tempfile.mkstemp(suffix='.txt')
+            os.close(progress_fd)
+            
             ffmpeg_cmd = [
                 'ffmpeg',
                 '-i', temp_ts_path,
                 '-c:a', codec,
                 *extra_args,
+                '-progress', progress_path,  # プログレス情報出力
                 '-y',  # 上書き許可
                 output_path
             ]
             
             self.logger.info(f"音声変換開始: {codec} -> {output_path}")
+            print("\n音声変換中...")
             
             # FFmpeg実行
             process = await asyncio.create_subprocess_exec(
@@ -485,18 +493,147 @@ class TimeFreeRecorder(LoggerMixin):
                 stderr=asyncio.subprocess.PIPE
             )
             
+            # プログレスバーを表示しながら処理を待機
+            await self._show_ffmpeg_progress(process, progress_path, temp_ts_path)
+            
             stdout, stderr = await process.communicate()
+            
+            # プログレスファイルを削除
+            try:
+                os.unlink(progress_path)
+            except:
+                pass
             
             if process.returncode != 0:
                 error_msg = stderr.decode('utf-8') if stderr else 'Unknown FFmpeg error'
                 raise FileConversionError(f"FFmpeg変換エラー: {error_msg}")
             
+            print("\n音声変換完了!")
             self.logger.info(f"音声変換完了: {output_path}")
             
         except FileNotFoundError:
             raise FileConversionError("FFmpegが見つかりません。FFmpegをインストールしてください。")
         except Exception as e:
             raise FileConversionError(f"音声変換エラー: {e}")
+    
+    async def _show_ffmpeg_progress(self, process: asyncio.subprocess.Process, progress_path: str, input_file: str):
+        """FFmpegの進捗を表示する
+        
+        Args:
+            process: FFmpegプロセス
+            progress_path: プログレス情報ファイルパス
+            input_file: 入力ファイルパス（時間取得用）
+        """
+        try:
+            # 入力ファイルの総時間を取得
+            duration = await self._get_media_duration(input_file)
+            
+            # プログレスバーを表示
+            last_time = 0
+            while process.returncode is None:
+                try:
+                    # プログレスファイルを読み込む
+                    if os.path.exists(progress_path):
+                        with open(progress_path, 'r') as f:
+                            content = f.read()
+                            current_time = self._parse_ffmpeg_progress(content)
+                            
+                            if current_time > last_time:
+                                last_time = current_time
+                                if duration > 0:
+                                    progress = min(current_time / duration, 1.0)
+                                    self._display_progress_bar(progress, current_time, duration)
+                except Exception:
+                    pass
+                
+                await asyncio.sleep(0.1)
+                
+            # 最終的に100%を表示
+            if duration > 0:
+                self._display_progress_bar(1.0, duration, duration)
+                
+        except Exception as e:
+            self.logger.debug(f"Progress display error: {e}")
+    
+    async def _get_media_duration(self, file_path: str) -> float:
+        """メディアファイルの時間を取得
+        
+        Args:
+            file_path: ファイルパス
+            
+        Returns:
+            時間（秒）
+        """
+        try:
+            cmd = [
+                'ffprobe',
+                '-v', 'quiet',
+                '-show_entries', 'format=duration',
+                '-of', 'csv=p=0',
+                file_path
+            ]
+            
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, _ = await process.communicate()
+            
+            if process.returncode == 0:
+                return float(stdout.decode().strip())
+            else:
+                return 0.0
+                
+        except Exception:
+            return 0.0
+    
+    def _parse_ffmpeg_progress(self, content: str) -> float:
+        """FFmpegプログレス情報から現在時刻を解析
+        
+        Args:
+            content: プログレスファイルの内容
+            
+        Returns:
+            現在時刻（秒）
+        """
+        try:
+            # out_time_msフィールドを検索
+            for line in content.split('\n'):
+                if line.startswith('out_time_ms='):
+                    time_ms = int(line.split('=')[1])
+                    return time_ms / 1000000.0  # マイクロ秒を秒に変換
+            return 0.0
+        except Exception:
+            return 0.0
+    
+    def _display_progress_bar(self, progress: float, current_time: float, total_time: float):
+        """プログレスバーを表示
+        
+        Args:
+            progress: 進捗率（0.0-1.0）
+            current_time: 現在時刻（秒）
+            total_time: 総時間（秒）
+        """
+        try:
+            bar_length = 30
+            filled_length = int(bar_length * progress)
+            
+            bar = '█' * filled_length + '-' * (bar_length - filled_length)
+            
+            # 時刻を mm:ss 形式に変換
+            current_min, current_sec = divmod(int(current_time), 60)
+            total_min, total_sec = divmod(int(total_time), 60)
+            
+            percent = progress * 100
+            
+            # カーソルを行の先頭に戻して上書き
+            sys.stdout.write(f'\\r変換進捗: |{bar}| {percent:.1f}% ({current_min:02d}:{current_sec:02d}/{total_min:02d}:{total_sec:02d})')
+            sys.stdout.flush()
+            
+        except Exception:
+            pass
     
     def _embed_metadata(self, file_path: str, program_info: 'ProgramInfo'):
         """ID3メタデータの埋め込み
