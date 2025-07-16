@@ -202,6 +202,6 @@ class UIService:
         
         key = self.keyboard_handler.get_key()
         # 何も入力せずEnterキーを押した場合はYとして扱う
-        if key == '\r' or key == '\n':
+        if key == 'ENTER':
             return True
         return key.lower() == 'y'
