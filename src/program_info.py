@@ -60,7 +60,11 @@ class Program:
         if self.performers is None:
             self.performers = []
         if not self.duration:
-            self.duration = int((self.end_time - self.start_time).total_seconds() / 60)
+            end_time = self.end_time
+            # 終了時刻が開始時刻よりも前の場合、翌日として処理
+            if end_time <= self.start_time:
+                end_time = end_time + timedelta(days=1)
+            self.duration = int((end_time - self.start_time).total_seconds() / 60)
     
     @property
     def duration_minutes(self) -> int:
@@ -108,12 +112,20 @@ class ProgramInfo:
     @property
     def duration_minutes(self) -> int:
         """番組時間（分）"""
-        return int((self.end_time - self.start_time).total_seconds() / 60)
+        end_time = self.end_time
+        # 終了時刻が開始時刻よりも前の場合、翌日として処理
+        if end_time <= self.start_time:
+            end_time = end_time + timedelta(days=1)
+        return int((end_time - self.start_time).total_seconds() / 60)
     
     @property
     def duration_seconds(self) -> int:
         """番組時間（秒）"""
-        return int((self.end_time - self.start_time).total_seconds())
+        end_time = self.end_time
+        # 終了時刻が開始時刻よりも前の場合、翌日として処理
+        if end_time <= self.start_time:
+            end_time = end_time + timedelta(days=1)
+        return int((end_time - self.start_time).total_seconds())
     
     @property
     def is_midnight_program(self) -> bool:
@@ -437,7 +449,7 @@ class ProgramInfoManager(LoggerMixin):
                 title=title,
                 start_time=start_time,
                 end_time=end_time,
-                duration=int((end_time - start_time).total_seconds() / 60),
+                duration=int(((end_time + timedelta(days=1)) - start_time if end_time <= start_time else end_time - start_time).total_seconds() / 60),
                 description=self._get_element_text(prog_elem, 'desc'),
                 performers=performers,
                 genre=self._get_element_text(prog_elem, 'genre'),

@@ -502,6 +502,11 @@ class ProgramHistoryManager(LoggerMixin):
             if not start_time or not end_time:
                 return None
             
+            # 終了時刻が開始時刻よりも前の場合、翌日として処理
+            if end_time <= start_time:
+                end_time = end_time + timedelta(days=1)
+                self.logger.debug(f"終了時刻を翌日に修正: {end_time}")
+            
             # 番組詳細取得
             title_elem = prog_elem.find('title')
             title = title_elem.text if title_elem is not None and title_elem.text else '番組名不明'
