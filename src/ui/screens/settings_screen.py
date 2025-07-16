@@ -242,19 +242,6 @@ class SettingsScreen(ScreenBase):
             self.logger.error(f"Error resetting to defaults: {e}")
             return False
     
-    def export_settings(self, export_path: str) -> bool:
-        """Export settings to file"""
-        return self.config_manager.export_config(export_path, self.current_settings)
-    
-    def import_settings(self, import_path: str) -> bool:
-        """Import settings from file"""
-        imported_config = self.config_manager.import_config(import_path)
-        if imported_config:
-            self.current_settings = imported_config
-            self.config_data = imported_config.copy()
-            self.setting_items = self._initialize_setting_items()
-            return True
-        return False
     
     def validate_all_settings(self) -> Tuple[bool, List[str]]:
         """Validate all current settings"""
@@ -308,10 +295,6 @@ class SettingsScreen(ScreenBase):
                         self.handle_audio_quality_setting()
                     elif selected_item.id == "reset_defaults":
                         self.handle_reset_defaults()
-                    elif selected_item.id == "export_settings":
-                        self.handle_export_settings()
-                    elif selected_item.id == "import_settings":
-                        self.handle_import_settings()
                     elif selected_item.id == "back_to_main":
                         break  # メインメニューに戻る
                     else:
@@ -385,29 +368,6 @@ class SettingsScreen(ScreenBase):
             return result
         return False
     
-    def handle_export_settings(self) -> bool:
-        """Handle settings export"""
-        export_path = self.ui_service.get_text_input("エクスポート先パス: ")
-        if export_path:
-            result = self.export_settings(export_path)
-            if result:
-                self.ui_service.display_success(f"設定をエクスポートしました: {export_path}")
-            else:
-                self.ui_service.display_error("設定のエクスポートに失敗しました")
-            return result
-        return False
-    
-    def handle_import_settings(self) -> bool:
-        """Handle settings import"""
-        import_path = self.ui_service.get_text_input("インポート元パス: ")
-        if import_path:
-            result = self.import_settings(import_path)
-            if result:
-                self.ui_service.display_success(f"設定をインポートしました: {import_path}")
-            else:
-                self.ui_service.display_error("設定のインポートに失敗しました")
-            return result
-        return False
     
     def _initialize_setting_items(self) -> List[SettingItem]:
         """Initialize setting items"""
@@ -433,22 +393,6 @@ class SettingsScreen(ScreenBase):
                 id="reset_defaults",
                 title="設定をデフォルトに戻す",
                 description="全設定を初期値に戻す",
-                current_value=None,
-                default_value=None,
-                setting_type=SettingType.ACTION
-            ),
-            SettingItem(
-                id="export_settings",
-                title="設定ファイルエクスポート",
-                description="設定をファイルに保存",
-                current_value=None,
-                default_value=None,
-                setting_type=SettingType.ACTION
-            ),
-            SettingItem(
-                id="import_settings",
-                title="設定ファイルインポート",
-                description="設定をファイルから読み込み",
                 current_value=None,
                 default_value=None,
                 setting_type=SettingType.ACTION

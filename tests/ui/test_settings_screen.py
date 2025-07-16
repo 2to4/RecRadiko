@@ -8,7 +8,6 @@ Tests the settings management functionality including:
 - Audio quality settings validation
 - File path settings with filesystem validation
 - Settings save/load with persistence
-- Export/import functionality
 - Error handling and validation
 
 Following the principle of minimal mock usage - using real filesystem, 
@@ -114,7 +113,7 @@ class TestSettingsScreenReal:
         
         expected_setting_ids = [
             "region", "audio_quality",
-            "reset_defaults", "export_settings", "import_settings", "back_to_main"
+            "reset_defaults", "back_to_main"
         ]
         
         setting_ids = [item.id for item in settings_screen.setting_items]
@@ -262,34 +261,6 @@ class TestSettingsScreenReal:
             # Cleanup
             readonly_dir.chmod(0o755)
     
-    def test_settings_export_import_with_real_files(self, settings_screen, temp_config_dir):
-        """Test settings export/import with real files"""
-        # Load settings
-        settings_screen.load_settings()
-        
-        # Export settings
-        export_file = temp_config_dir / "exported_settings.json"
-        result = settings_screen.export_settings(str(export_file))
-        
-        assert result == True
-        assert export_file.exists()
-        
-        # Verify exported content
-        with open(export_file, 'r', encoding='utf-8') as f:
-            exported_data = json.load(f)
-        
-        assert exported_data["prefecture"] == "東京"
-        assert exported_data["audio"]["format"] == "mp3"
-        
-        # Modify current settings
-        settings_screen.current_settings["prefecture"] = "北海道"
-        settings_screen.save_settings()
-        
-        # Import settings
-        result = settings_screen.import_settings(str(export_file))
-        
-        assert result == True
-        assert settings_screen.current_settings["prefecture"] == "東京"  # Restored
     
     def test_settings_reset_to_defaults(self, settings_screen):
         """Test reset to default settings"""

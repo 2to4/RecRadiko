@@ -12,7 +12,8 @@
       "Edit(docs/*)",
       "Bash(gh pr create:*)",
       "Bash(sed:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
