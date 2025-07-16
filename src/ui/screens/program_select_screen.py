@@ -12,7 +12,7 @@ Based on UI_SPECIFICATION.md:
 """
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional, List, Dict, Any
 import math
 from src.ui.screen_base import ScreenBase
@@ -122,11 +122,28 @@ class ProgramSelectScreen(ScreenBase):
             date_str = target_date.strftime('%Y-%m-%d')
             self.logger.debug(f"Converted date to string: {date_str}")
             
-            # Get ProgramInfo objects from API
+            # Get ProgramInfo objects from API for the specified date
             self.logger.info(f"Calling get_programs_by_date for station {station_id} on {date_str}")
             program_infos = program_history_manager.get_programs_by_date(date_str, station_id)
             
-            self.logger.info(f"API returned {len(program_infos)} program objects")
+            # Also get programs from the next day for midnight programs
+            next_date = target_date + timedelta(days=1)
+            next_date_str = next_date.strftime('%Y-%m-%d')
+            self.logger.info(f"Calling get_programs_by_date for station {station_id} on {next_date_str} (for midnight programs)")
+            
+            try:
+                next_day_programs = program_history_manager.get_programs_by_date(next_date_str, station_id)
+                # Filter midnight programs (0:00-5:59) from next day
+                midnight_programs = [p for p in next_day_programs if p.start_time.hour < 6]
+                self.logger.info(f"Found {len(midnight_programs)} midnight programs from next day")
+                
+                # Add midnight programs to the main list
+                program_infos.extend(midnight_programs)
+                
+            except Exception as e:
+                self.logger.warning(f"Could not fetch next day programs for midnight shows: {e}")
+            
+            self.logger.info(f"API returned {len(program_infos)} program objects total")
             
             if not program_infos:
                 self.logger.warning(f"No program info objects returned from API for {station_id} on {date_str}")
@@ -136,21 +153,36 @@ class ProgramSelectScreen(ScreenBase):
             programs = []
             for i, prog in enumerate(program_infos):
                 try:
+                    # For midnight programs, show them as belonging to the previous day
+                    if prog.is_midnight_program:
+                        # This is a midnight program, show it with a special marker
+                        display_title = f"🌙 {prog.title}"
+                        display_date = prog.display_date
+                        self.logger.debug(f"Midnight program: {prog.title} on {display_date}")
+                    else:
+                        display_title = prog.title
+                        display_date = prog.start_time.date().strftime('%Y-%m-%d')
+                    
                     program_dict = {
                         'id': prog.program_id,
-                        'title': prog.title,
+                        'title': display_title,
                         'start_time': prog.start_time.strftime('%H:%M'),
                         'end_time': prog.end_time.strftime('%H:%M'),
                         'performer': getattr(prog, 'performers', []),
                         'description': getattr(prog, 'description', ''),
                         'station_id': prog.station_id,
-                        'station_name': prog.station_name
+                        'station_name': prog.station_name,
+                        'display_date': display_date,
+                        'is_midnight': prog.is_midnight_program
                     }
                     programs.append(program_dict)
                     
                 except Exception as prog_e:
                     self.logger.error(f"Error converting program {i} to dict: {prog_e}")
                     continue
+            
+            # Sort programs by start time for better display
+            programs.sort(key=lambda x: x['start_time'])
             
             self.logger.info(f"Successfully converted {len(programs)} programs to dictionary format")
             return programs

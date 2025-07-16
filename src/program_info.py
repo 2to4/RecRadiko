@@ -115,6 +115,21 @@ class ProgramInfo:
         """番組時間（秒）"""
         return int((self.end_time - self.start_time).total_seconds())
     
+    @property
+    def is_midnight_program(self) -> bool:
+        """深夜番組かどうか（0:00-5:59開始の番組）"""
+        return self.start_time.hour < 6
+    
+    @property
+    def display_date(self) -> str:
+        """番組表上の表示日付（深夜番組は前日扱い）"""
+        if self.is_midnight_program:
+            # 深夜番組は前日の日付として扱う
+            display_date = self.start_time.date() - timedelta(days=1)
+        else:
+            display_date = self.start_time.date()
+        return display_date.strftime('%Y-%m-%d')
+    
     def to_filename(self, format: str = "mp3") -> str:
         """録音ファイル名生成
         
