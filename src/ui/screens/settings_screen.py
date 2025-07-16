@@ -2,7 +2,7 @@
 Settings Screen for RecRadiko
 
 Provides keyboard navigation interface for system settings management.
-Supports region settings, audio quality, file paths, notifications, and more.
+Supports region settings, audio quality, file paths, and more.
 """
 
 import json
@@ -134,16 +134,6 @@ class SettingValidator(LoggerMixin):
         except Exception as e:
             return False, f"ファイルパスの検証中にエラーが発生しました: {e}"
     
-    def validate_notification_setting(self, setting: str) -> Tuple[bool, str]:
-        """Validate notification setting"""
-        if not setting or not isinstance(setting, str):
-            return False, "通知設定が指定されていません"
-        
-        valid_settings = ["無効", "macos_standard", "sound", "email"]
-        if setting not in valid_settings:
-            return False, f"無効な通知設定です: {setting}"
-        
-        return True, ""
     
     def validate_boolean_setting(self, value: Any) -> Tuple[bool, str]:
         """Validate boolean setting"""
@@ -180,10 +170,6 @@ class SettingsScreen(ScreenBase):
             "id3_tags_enabled": True,
             "timeout_seconds": 30,
             "max_retries": 3
-        },
-        "notification": {
-            "type": "macos_standard",
-            "enabled": True
         },
         "system": {
             "log_level": "INFO",
@@ -281,7 +267,7 @@ class SettingsScreen(ScreenBase):
         errors = []
         
         # Check required keys
-        required_keys = ["prefecture", "audio", "recording", "notification"]
+        required_keys = ["prefecture", "audio", "recording"]
         for key in required_keys:
             if key not in config_data:
                 errors.append(f"Missing required key: {key}")
@@ -321,8 +307,6 @@ class SettingsScreen(ScreenBase):
                     self.handle_save_path_setting()
                 elif selected_option == "録音後処理":
                     self.handle_id3_tags_setting()
-                elif selected_option == "通知設定":
-                    self.handle_notification_setting()
                 elif selected_option == "設定をデフォルトに戻す":
                     self.handle_reset_defaults()
                 elif selected_option == "設定ファイルエクスポート":
@@ -379,11 +363,6 @@ class SettingsScreen(ScreenBase):
         self.ui_service.display_info("ID3タグ設定機能は実装中です")
         return False
     
-    def handle_notification_setting(self) -> bool:
-        """Handle notification setting change"""
-        # Implementation placeholder
-        self.ui_service.display_info("通知設定機能は実装中です")
-        return False
     
     def handle_reset_defaults(self) -> bool:
         """Handle reset to defaults"""
@@ -457,15 +436,6 @@ class SettingsScreen(ScreenBase):
                 setting_type=SettingType.BOOLEAN
             ),
             SettingItem(
-                id="notifications",
-                title="通知設定",
-                description="完了通知の設定",
-                current_value=self._get_current_notification_setting(),
-                default_value="macos_standard",
-                setting_type=SettingType.SELECTION,
-                options=["無効", "macos_standard", "sound", "email"]
-            ),
-            SettingItem(
                 id="reset_defaults",
                 title="設定をデフォルトに戻す",
                 description="全設定を初期値に戻す",
@@ -513,7 +483,3 @@ class SettingsScreen(ScreenBase):
         recording = self.current_settings.get("recording", {})
         return recording.get("id3_tags_enabled", True)
     
-    def _get_current_notification_setting(self) -> str:
-        """Get current notification setting"""
-        notification = self.current_settings.get("notification", {})
-        return notification.get("type", "macos_standard")

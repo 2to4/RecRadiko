@@ -56,14 +56,8 @@ class TestSettingsScreenReal:
                 "sample_rate": 48000
             },
             "recording": {
-                "save_path": str(temp_config_dir / "recordings"),
-                "id3_tags_enabled": True,
                 "timeout_seconds": 30,
                 "max_retries": 3
-            },
-            "notification": {
-                "type": "macos_standard",
-                "enabled": True
             },
             "system": {
                 "log_level": "INFO",
@@ -119,8 +113,8 @@ class TestSettingsScreenReal:
         settings_screen.load_settings()
         
         expected_setting_ids = [
-            "region", "audio_quality", "save_path", "id3_tags",
-            "notifications", "reset_defaults", "export_settings", "import_settings"
+            "region", "audio_quality",
+            "reset_defaults", "export_settings", "import_settings", "back_to_main"
         ]
         
         setting_ids = [item.id for item in settings_screen.setting_items]
@@ -139,7 +133,6 @@ class TestSettingsScreenReal:
         assert settings_screen.current_settings["prefecture"] == "東京"
         assert settings_screen.current_settings["audio"]["format"] == "mp3"
         assert settings_screen.current_settings["audio"]["bitrate"] == 256
-        assert settings_screen.current_settings["recording"]["id3_tags_enabled"] == True
         
         # Verify file content matches
         with open(real_config_file, 'r', encoding='utf-8') as f:
@@ -533,22 +526,3 @@ class TestSettingValidatorReal:
             assert is_valid == False
             assert error != ""
     
-    def test_notification_setting_validation(self):
-        """Test notification setting validation"""
-        from src.ui.screens.settings_screen import SettingValidator
-        
-        validator = SettingValidator()
-        
-        # Test valid notification settings
-        valid_settings = ["無効", "macos_standard", "sound", "email"]
-        for setting in valid_settings:
-            is_valid, error = validator.validate_notification_setting(setting)
-            assert is_valid == True
-            assert error == ""
-        
-        # Test invalid notification settings
-        invalid_settings = ["invalid_type", "windows_notification", ""]
-        for setting in invalid_settings:
-            is_valid, error = validator.validate_notification_setting(setting)
-            assert is_valid == False
-            assert error != ""
