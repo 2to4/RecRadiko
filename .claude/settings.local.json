@@ -13,7 +13,8 @@
       "Bash(gh pr create:*)",
       "Bash(sed:*)",
       "Bash(mv:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(ls:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
