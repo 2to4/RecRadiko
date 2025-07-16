@@ -55,9 +55,9 @@ class RegionSelectScreen(ScreenBase):
             
             regions[region_name].append((prefecture_name, area_id))
         
-        # 各地方内で都道府県をソート
+        # 各地方内で都道府県を地域ID順にソート（北から南へ）
         for region_name in regions:
-            regions[region_name].sort(key=lambda x: x[0])
+            regions[region_name].sort(key=lambda x: x[1])  # area_idでソート
         
         return regions
     
@@ -172,12 +172,34 @@ class RegionSelectScreen(ScreenBase):
     def _setup_menu_items(self) -> None:
         """現在のビューに応じてメニューアイテムを設定"""
         if self.current_view == "region_list":
-            # 地方一覧を設定
+            # 地方一覧を北から南へ並べて設定
             region_names = list(self.regions_by_area.keys())
-            region_names.sort()
+            
+            # 地方を北から南へ並べる順序を定義
+            region_order = [
+                "北海道",
+                "東北", 
+                "関東",
+                "中部",
+                "近畿",
+                "中国",
+                "四国",
+                "九州・沖縄"
+            ]
+            
+            # 定義された順序で地方名をソート
+            sorted_region_names = []
+            for region in region_order:
+                if region in region_names:
+                    sorted_region_names.append(region)
+            
+            # 定義されていない地方があれば最後に追加
+            for region in region_names:
+                if region not in sorted_region_names:
+                    sorted_region_names.append(region)
             
             menu_items = []
-            for region_name in region_names:
+            for region_name in sorted_region_names:
                 prefecture_count = len(self.regions_by_area[region_name])
                 menu_items.append(f"{region_name} ({prefecture_count}都道府県)")
             

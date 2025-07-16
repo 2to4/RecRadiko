@@ -88,15 +88,20 @@ class RegionMapper:
         "沖縄": "JP47", "沖縄県": "JP47", "Okinawa": "JP47", "okinawa": "JP47",
     }
     
-    # 地域詳細情報
+    # 地域詳細情報（地域ID順、地方内は北から南へ）
     REGION_INFO = {
+        # 北海道
         "JP1": RegionInfo("JP1", "北海道", "Hokkaido", "北海道", ["HBC", "STV", "AIR-G'"]),
+        
+        # 東北（北から南へ）
         "JP2": RegionInfo("JP2", "青森県", "Aomori", "東北", ["RAB"]),
         "JP3": RegionInfo("JP3", "岩手県", "Iwate", "東北", ["IBC"]),
-        "JP4": RegionInfo("JP4", "宮城県", "Miyagi", "東北", ["TBC", "fmSENDAI", "FMii"]),
         "JP5": RegionInfo("JP5", "秋田県", "Akita", "東北", ["ABS"]),
+        "JP4": RegionInfo("JP4", "宮城県", "Miyagi", "東北", ["TBC", "fmSENDAI", "FMii"]),
         "JP6": RegionInfo("JP6", "山形県", "Yamagata", "東北", ["YBC"]),
         "JP7": RegionInfo("JP7", "福島県", "Fukushima", "東北", ["RFC"]),
+        
+        # 関東（北から南へ）
         "JP8": RegionInfo("JP8", "茨城県", "Ibaraki", "関東", ["IBS"]),
         "JP9": RegionInfo("JP9", "栃木県", "Tochigi", "関東", ["CRT"]),
         "JP10": RegionInfo("JP10", "群馬県", "Gunma", "関東", ["FM-GUNMA"]),
@@ -104,6 +109,8 @@ class RegionMapper:
         "JP12": RegionInfo("JP12", "千葉県", "Chiba", "関東", ["CRO", "bayfm"]),
         "JP13": RegionInfo("JP13", "東京都", "Tokyo", "関東", ["TBS", "QRR", "LFR", "INT", "FMT", "FMJ", "JORF"]),
         "JP14": RegionInfo("JP14", "神奈川県", "Kanagawa", "関東", ["YBS", "FMN"]),
+        
+        # 中部（北から南へ）
         "JP15": RegionInfo("JP15", "新潟県", "Niigata", "中部", ["BSN", "FM-NIIGATA"]),
         "JP16": RegionInfo("JP16", "富山県", "Toyama", "中部", ["KNB"]),
         "JP17": RegionInfo("JP17", "石川県", "Ishikawa", "中部", ["MRO"]),
@@ -113,29 +120,37 @@ class RegionMapper:
         "JP21": RegionInfo("JP21", "岐阜県", "Gifu", "中部", ["GBS"]),
         "JP22": RegionInfo("JP22", "静岡県", "Shizuoka", "中部", ["SBS", "K-MIX"]),
         "JP23": RegionInfo("JP23", "愛知県", "Aichi", "中部", ["CBC", "SF", "ZIP-FM"]),
-        "JP24": RegionInfo("JP24", "三重県", "Mie", "近畿", ["FM-MIE"]),
+        
+        # 近畿（北から南へ）
         "JP25": RegionInfo("JP25", "滋賀県", "Shiga", "近畿", ["BBC"]),
         "JP26": RegionInfo("JP26", "京都府", "Kyoto", "近畿", ["KBS", "α-STATION"]),
         "JP27": RegionInfo("JP27", "大阪府", "Osaka", "近畿", ["OBC", "MBS", "ABC", "FM-OSAKA", "FM802"]),
         "JP28": RegionInfo("JP28", "兵庫県", "Hyogo", "近畿", ["CRK", "Kiss-FM"]),
         "JP29": RegionInfo("JP29", "奈良県", "Nara", "近畿", ["FMN"]),
+        "JP24": RegionInfo("JP24", "三重県", "Mie", "近畿", ["FM-MIE"]),
         "JP30": RegionInfo("JP30", "和歌山県", "Wakayama", "近畿", ["WBS"]),
+        
+        # 中国（北東から南西へ）
         "JP31": RegionInfo("JP31", "鳥取県", "Tottori", "中国", ["BSS"]),
         "JP32": RegionInfo("JP32", "島根県", "Shimane", "中国", ["BSS"]),
         "JP33": RegionInfo("JP33", "岡山県", "Okayama", "中国", ["RSK", "FM-OKAYAMA"]),
         "JP34": RegionInfo("JP34", "広島県", "Hiroshima", "中国", ["RCC", "HFM"]),
         "JP35": RegionInfo("JP35", "山口県", "Yamaguchi", "中国", ["KRY"]),
-        "JP36": RegionInfo("JP36", "徳島県", "Tokushima", "四国", ["JRT"]),
+        
+        # 四国（北東から南西へ）
         "JP37": RegionInfo("JP37", "香川県", "Kagawa", "四国", ["RNC", "FM-KAGAWA"]),
+        "JP36": RegionInfo("JP36", "徳島県", "Tokushima", "四国", ["JRT"]),
         "JP38": RegionInfo("JP38", "愛媛県", "Ehime", "四国", ["RNB", "HiTFM"]),
         "JP39": RegionInfo("JP39", "高知県", "Kochi", "四国", ["RKC", "Hi-SIX"]),
-        "JP40": RegionInfo("JP40", "福岡県", "Fukuoka", "九州", ["RKB", "KBC", "FM-FUKUOKA", "LOVEFM"]),
-        "JP41": RegionInfo("JP41", "佐賀県", "Saga", "九州", ["NBC"]),
-        "JP42": RegionInfo("JP42", "長崎県", "Nagasaki", "九州", ["NBC", "FM-NAGASAKI"]),
-        "JP43": RegionInfo("JP43", "熊本県", "Kumamoto", "九州", ["RKK", "FMK"]),
-        "JP44": RegionInfo("JP44", "大分県", "Oita", "九州", ["OBS", "FM-OITA"]),
-        "JP45": RegionInfo("JP45", "宮崎県", "Miyazaki", "九州", ["MRT", "JOY-FM"]),
-        "JP46": RegionInfo("JP46", "鹿児島県", "Kagoshima", "九州", ["MBC", "μFM"]),
+        
+        # 九州・沖縄（北から南へ）
+        "JP40": RegionInfo("JP40", "福岡県", "Fukuoka", "九州・沖縄", ["RKB", "KBC", "FM-FUKUOKA", "LOVEFM"]),
+        "JP41": RegionInfo("JP41", "佐賀県", "Saga", "九州・沖縄", ["NBC"]),
+        "JP42": RegionInfo("JP42", "長崎県", "Nagasaki", "九州・沖縄", ["NBC", "FM-NAGASAKI"]),
+        "JP43": RegionInfo("JP43", "熊本県", "Kumamoto", "九州・沖縄", ["RKK", "FMK"]),
+        "JP44": RegionInfo("JP44", "大分県", "Oita", "九州・沖縄", ["OBS", "FM-OITA"]),
+        "JP45": RegionInfo("JP45", "宮崎県", "Miyazaki", "九州・沖縄", ["MRT", "JOY-FM"]),
+        "JP46": RegionInfo("JP46", "鹿児島県", "Kagoshima", "九州・沖縄", ["MBC", "μFM"]),
         "JP47": RegionInfo("JP47", "沖縄県", "Okinawa", "九州・沖縄", ["ROK"]),
     }
     
