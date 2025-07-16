@@ -210,9 +210,15 @@ class TimeFreeRecorder(LoggerMixin):
             str: タイムフリーM3U8 URL
         """
         try:
+            # 終了時刻が開始時刻よりも前の場合、翌日として処理
+            corrected_end_time = end_time
+            if end_time <= start_time:
+                corrected_end_time = end_time + timedelta(days=1)
+                self.logger.debug(f"終了時刻を翌日に修正: {corrected_end_time}")
+            
             # タイムフリー専用URL生成（直接形式）
             ft = start_time.strftime('%Y%m%d%H%M%S')
-            to = end_time.strftime('%Y%m%d%H%M%S')
+            to = corrected_end_time.strftime('%Y%m%d%H%M%S')
             
             playlist_url = f"https://radiko.jp/v2/api/ts/playlist.m3u8?station_id={station_id}&ft={ft}&to={to}"
             
@@ -528,6 +534,15 @@ class TimeFreeRecorder(LoggerMixin):
             # 入力ファイルの総時間を取得
             duration = await self._get_media_duration(input_file)
             
+            # tqdmプログレスバーを初期化
+            progress_bar = None
+            try:
+                from tqdm import tqdm
+                if duration > 0:
+                    progress_bar = tqdm(total=int(duration), desc="音声変換", unit="秒")
+            except ImportError:
+                pass
+                
             # プログレスバーを表示
             last_time = 0
             while process.returncode is None:
@@ -539,21 +554,27 @@ class TimeFreeRecorder(LoggerMixin):
                             current_time = self._parse_ffmpeg_progress(content)
                             
                             if current_time > last_time:
+                                if progress_bar:
+                                    # 進捗の差分を更新
+                                    progress_bar.update(int(current_time - last_time))
                                 last_time = current_time
-                                if duration > 0:
-                                    progress = min(current_time / duration, 1.0)
-                                    self._display_progress_bar(progress, current_time, duration)
                 except Exception:
                     pass
                 
                 await asyncio.sleep(0.1)
                 
-            # 最終的に100%を表示
-            if duration > 0:
-                self._display_progress_bar(1.0, duration, duration)
+            # プログレスバーを完了
+            if progress_bar:
+                # 残りの進捗を更新
+                remaining = int(duration - last_time)
+                if remaining > 0:
+                    progress_bar.update(remaining)
+                progress_bar.close()
                 
         except Exception as e:
             self.logger.debug(f"Progress display error: {e}")
+            if 'progress_bar' in locals() and progress_bar:
+                progress_bar.close()
     
     async def _get_media_duration(self, file_path: str) -> float:
         """メディアファイルの時間を取得
@@ -608,32 +629,6 @@ class TimeFreeRecorder(LoggerMixin):
         except Exception:
             return 0.0
     
-    def _display_progress_bar(self, progress: float, current_time: float, total_time: float):
-        """プログレスバーを表示
-        
-        Args:
-            progress: 進捗率（0.0-1.0）
-            current_time: 現在時刻（秒）
-            total_time: 総時間（秒）
-        """
-        try:
-            bar_length = 30
-            filled_length = int(bar_length * progress)
-            
-            bar = '█' * filled_length + '-' * (bar_length - filled_length)
-            
-            # 時刻を mm:ss 形式に変換
-            current_min, current_sec = divmod(int(current_time), 60)
-            total_min, total_sec = divmod(int(total_time), 60)
-            
-            percent = progress * 100
-            
-            # カーソルを行の先頭に戻して上書き
-            sys.stdout.write(f'\\r変換進捗: |{bar}| {percent:.1f}% ({current_min:02d}:{current_sec:02d}/{total_min:02d}:{total_sec:02d})')
-            sys.stdout.flush()
-            
-        except Exception:
-            pass
     
     def _embed_metadata(self, file_path: str, program_info: 'ProgramInfo'):
         """ID3メタデータの埋め込み

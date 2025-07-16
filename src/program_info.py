@@ -142,6 +142,31 @@ class ProgramInfo:
             display_date = self.start_time.date()
         return display_date.strftime('%Y-%m-%d')
     
+    @property
+    def display_start_time(self) -> str:
+        """表示用開始時刻（深夜番組は24時間表示）"""
+        if self.is_midnight_program:
+            # 深夜番組は24時間を足して表示（例：01:00 → 25:00）
+            display_hour = self.start_time.hour + 24
+            return f"{display_hour:02d}:{self.start_time.minute:02d}"
+        else:
+            return self.start_time.strftime('%H:%M')
+    
+    @property
+    def display_end_time(self) -> str:
+        """表示用終了時刻（深夜番組は24時間表示）"""
+        # 終了時刻が開始時刻よりも前の場合、翌日として処理
+        end_time = self.end_time
+        if end_time <= self.start_time:
+            end_time = end_time + timedelta(days=1)
+            
+        if self.is_midnight_program:
+            # 深夜番組は24時間を足して表示
+            display_hour = end_time.hour + 24 if end_time.hour < 6 else end_time.hour
+            return f"{display_hour:02d}:{end_time.minute:02d}"
+        else:
+            return end_time.strftime('%H:%M')
+    
     def to_filename(self, format: str = "mp3") -> str:
         """録音ファイル名生成
         

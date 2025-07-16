@@ -13,7 +13,7 @@ Based on UI_SPECIFICATION.md:
 
 import logging
 from typing import Optional, Dict, Any
-from datetime import date
+from datetime import date, datetime, timedelta
 from src.ui.screens import MainMenuScreen, StationSelectScreen, DateSelectScreen, ProgramSelectScreen
 from src.ui.menu_manager import MenuManager
 from src.ui.services.ui_service import UIService
@@ -520,14 +520,26 @@ class RecordingWorkflow:
             if start_time_str and end_time_str:
                 # If only time is provided, combine with selected date
                 if len(start_time_str) <= 5:  # "HH:MM" format
-                    start_datetime = datetime.combine(
-                        self.selected_date, 
-                        datetime.strptime(start_time_str, "%H:%M").time()
-                    )
-                    end_datetime = datetime.combine(
-                        self.selected_date, 
-                        datetime.strptime(end_time_str, "%H:%M").time()
-                    )
+                    start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
+                    end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
+                    
+                    # 深夜番組の場合（00:00-05:59）は翌日の日付を使用
+                    if start_time_obj.hour < 6:
+                        # 深夜番組は翌日の日付
+                        program_date = self.selected_date + timedelta(days=1)
+                        self.logger.debug(f"深夜番組検出: 選択日付={self.selected_date}, 録音日付={program_date}")
+                    else:
+                        # 通常番組は選択した日付
+                        program_date = self.selected_date
+                        self.logger.debug(f"通常番組: 選択日付={self.selected_date}, 録音日付={program_date}")
+                    
+                    start_datetime = datetime.combine(program_date, start_time_obj)
+                    
+                    # 終了時刻が開始時刻よりも前の場合、翌日として処理
+                    if end_time_obj <= start_time_obj:
+                        end_datetime = datetime.combine(program_date + timedelta(days=1), end_time_obj)
+                    else:
+                        end_datetime = datetime.combine(program_date, end_time_obj)
                 else:
                     # Full datetime format
                     start_datetime = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")

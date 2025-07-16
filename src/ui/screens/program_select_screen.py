@@ -12,7 +12,7 @@ Based on UI_SPECIFICATION.md:
 """
 
 import logging
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional, List, Dict, Any
 import math
 from src.ui.screen_base import ScreenBase
@@ -126,22 +126,16 @@ class ProgramSelectScreen(ScreenBase):
             self.logger.info(f"Calling get_programs_by_date for station {station_id} on {date_str}")
             program_infos = program_history_manager.get_programs_by_date(date_str, station_id)
             
-            # Also get programs from the next day for midnight programs
-            next_date = target_date + timedelta(days=1)
-            next_date_str = next_date.strftime('%Y-%m-%d')
-            self.logger.info(f"Calling get_programs_by_date for station {station_id} on {next_date_str} (for midnight programs)")
+            # Separate regular programs and midnight programs
+            regular_programs = [p for p in program_infos if not p.is_midnight_program]
+            midnight_programs = [p for p in program_infos if p.is_midnight_program]
             
-            try:
-                next_day_programs = program_history_manager.get_programs_by_date(next_date_str, station_id)
-                # Filter midnight programs (0:00-5:59) from next day
-                midnight_programs = [p for p in next_day_programs if p.start_time.hour < 6]
-                self.logger.info(f"Found {len(midnight_programs)} midnight programs from next day")
-                
-                # Add midnight programs to the main list
-                program_infos.extend(midnight_programs)
-                
-            except Exception as e:
-                self.logger.warning(f"Could not fetch next day programs for midnight shows: {e}")
+            # Sort programs by start time
+            regular_programs.sort(key=lambda x: x.start_time)
+            midnight_programs.sort(key=lambda x: x.start_time)
+            
+            # Combine: regular programs first, then midnight programs at the end
+            program_infos = regular_programs + midnight_programs
             
             self.logger.info(f"API returned {len(program_infos)} program objects total")
             
@@ -155,8 +149,8 @@ class ProgramSelectScreen(ScreenBase):
                 try:
                     # For midnight programs, show them as belonging to the previous day
                     if prog.is_midnight_program:
-                        # This is a midnight program, show it with a special marker
-                        display_title = f"🌙 {prog.title}"
+                        # This is a midnight program
+                        display_title = prog.title
                         display_date = prog.display_date
                         self.logger.debug(f"Midnight program: {prog.title} on {display_date}")
                     else:
@@ -168,6 +162,8 @@ class ProgramSelectScreen(ScreenBase):
                         'title': display_title,
                         'start_time': prog.start_time.strftime('%H:%M'),
                         'end_time': prog.end_time.strftime('%H:%M'),
+                        'display_start_time': prog.display_start_time,
+                        'display_end_time': prog.display_end_time,
                         'performer': getattr(prog, 'performers', []),
                         'description': getattr(prog, 'description', ''),
                         'station_id': prog.station_id,
@@ -181,8 +177,16 @@ class ProgramSelectScreen(ScreenBase):
                     self.logger.error(f"Error converting program {i} to dict: {prog_e}")
                     continue
             
-            # Sort programs by start time for better display
-            programs.sort(key=lambda x: x['start_time'])
+            # Sort programs by maintaining regular programs first, then midnight programs
+            regular_programs = [p for p in programs if not p.get('is_midnight', False)]
+            midnight_programs = [p for p in programs if p.get('is_midnight', False)]
+            
+            # Sort each group by start time
+            regular_programs.sort(key=lambda x: x['start_time'])
+            midnight_programs.sort(key=lambda x: x['start_time'])
+            
+            # Combine: regular programs first, then midnight programs at the end
+            programs = regular_programs + midnight_programs
             
             self.logger.info(f"Successfully converted {len(programs)} programs to dictionary format")
             return programs
@@ -346,11 +350,11 @@ class ProgramSelectScreen(ScreenBase):
         Returns:
             Formatted display string
         """
-        start_time = program.get("start_time", "")
-        end_time = program.get("end_time", "")
+        display_start_time = program.get("display_start_time", program.get("start_time", ""))
+        display_end_time = program.get("display_end_time", program.get("end_time", ""))
         title = program.get("title", "")
         
-        return f"{start_time}-{end_time} {title}"
+        return f"{display_start_time}-{display_end_time} {title}"
         
     def get_program_by_display_text(self, display_text: str) -> Optional[Dict[str, Any]]:
         """
@@ -459,7 +463,9 @@ class ProgramSelectScreen(ScreenBase):
         print(f"\\n番組詳細情報")
         print("=" * 20)
         print(f"番組名: {program.get('title', '')}")
-        print(f"放送時間: {program.get('start_time', '')}-{program.get('end_time', '')}")
+        display_start_time = program.get('display_start_time', program.get('start_time', ''))
+        display_end_time = program.get('display_end_time', program.get('end_time', ''))
+        print(f"放送時間: {display_start_time}-{display_end_time}")
         
         if 'performer' in program and program['performer']:
             print(f"出演者: {program['performer']}")
@@ -668,8 +674,8 @@ class ProgramSelectScreen(ScreenBase):
         if not self.programs:
             return "番組なし"
             
-        start_times = [prog.get('start_time', '') for prog in self.programs if prog.get('start_time')]
-        end_times = [prog.get('end_time', '') for prog in self.programs if prog.get('end_time')]
+        start_times = [prog.get('display_start_time', prog.get('start_time', '')) for prog in self.programs if prog.get('display_start_time') or prog.get('start_time')]
+        end_times = [prog.get('display_end_time', prog.get('end_time', '')) for prog in self.programs if prog.get('display_end_time') or prog.get('end_time')]
         
         if start_times and end_times:
             earliest = min(start_times)
