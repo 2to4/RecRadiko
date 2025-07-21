@@ -99,7 +99,7 @@ class TestRunner:
             cov.stop()
             cov.save()
             
-            print("\\n" + "=" * 70)
+            print("\n" + "=" * 70)
             print("カバレッジレポート:")
             print("=" * 70)
             
@@ -111,7 +111,7 @@ class TestRunner:
             print(f"\\nHTML カバレッジレポートが生成されました: {html_dir}/index.html")
         
         # 結果サマリー
-        print("\\n" + "=" * 70)
+        print("\n" + "=" * 70)
         print("テスト結果サマリー:")
         print("=" * 70)
         print(f"実行テスト数: {result.testsRun}")

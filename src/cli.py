@@ -57,8 +57,9 @@ class RecRadikoCLI(LoggerMixin):
         # 警告フィルター設定（UserWarning抑制）
         self._setup_warning_filters()
         
-        # 統一設定管理を使用
-        self.config_manager = ConfigManager(self.config_path)
+        # 統一設定管理を使用（テンプレートパス指定）
+        template_path = self.config_path.parent / "config.json.template"
+        self.config_manager = ConfigManager(self.config_path, template_path=template_path)
         self.config = self._load_config()
         
         # 詳細ログ設定
@@ -372,7 +373,7 @@ class RecRadikoCLI(LoggerMixin):
                 return self._run_keyboard_ui()
                 
         except KeyboardInterrupt:
-            print("\\n操作がキャンセルされました")
+            print("\n操作がキャンセルされました")
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 return 1

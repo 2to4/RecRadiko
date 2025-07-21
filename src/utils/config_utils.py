@@ -26,15 +26,45 @@ class ConfigManager:
         config_manager.save_config(config)
     """
     
-    def __init__(self, config_path: Union[str, Path], encoding: str = 'utf-8'):
+    def __init__(self, config_path: Union[str, Path], encoding: str = 'utf-8', template_path: Optional[Union[str, Path]] = None):
         """初期化
         
         Args:
             config_path: 設定ファイルパス
             encoding: ファイルエンコーディング（デフォルト: utf-8）
+            template_path: テンプレートファイルパス（指定時はテンプレートを使用）
         """
         self.config_path = Path(config_path)
         self.encoding = encoding
+        self.template_path = Path(template_path) if template_path else None
+    
+    def load_template_config(self) -> Optional[Dict[str, Any]]:
+        """テンプレートファイルから設定を読み込み
+        
+        Returns:
+            テンプレート設定辞書（読み込み失敗時はNone）
+        """
+        if not self.template_path:
+            logger.debug("テンプレートパスが指定されていません")
+            return None
+            
+        try:
+            if not self.template_path.exists():
+                logger.warning(f"テンプレートファイルが存在しません: {self.template_path}")
+                return None
+                
+            with open(self.template_path, 'r', encoding=self.encoding) as f:
+                template_config = json.load(f)
+            
+            logger.info(f"テンプレートファイル読み込み成功: {self.template_path}")
+            return template_config
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"テンプレートファイルJSON解析エラー: {self.template_path} - {e}")
+            return None
+        except Exception as e:
+            logger.error(f"テンプレートファイル読み込みエラー: {self.template_path} - {e}")
+            return None
     
     def load_config(self, default_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """設定ファイルを読み込み
@@ -43,7 +73,7 @@ class ConfigManager:
             default_config: デフォルト設定辞書
             
         Returns:
-            設定辞書（ファイルが存在しない場合はデフォルト設定）
+            設定辞書（ファイルが存在しない場合はテンプレートまたはデフォルト設定）
         """
         if default_config is None:
             default_config = {}
@@ -60,10 +90,24 @@ class ConfigManager:
                 logger.debug(f"設定ファイル読み込み成功: {self.config_path}")
                 return merged_config
             else:
-                logger.info(f"設定ファイルが存在しません。デフォルト設定を使用: {self.config_path}")
-                if default_config:
-                    self.save_config(default_config)
-                return default_config.copy()
+                logger.info(f"設定ファイルが存在しません: {self.config_path}")
+                
+                # テンプレートがある場合はテンプレートを使用
+                template_config = self.load_template_config()
+                if template_config:
+                    # テンプレート設定とデフォルト設定をマージ
+                    merged_config = default_config.copy()
+                    merged_config.update(template_config)
+                    
+                    logger.info("テンプレートベースで設定ファイルを作成します")
+                    self.save_config(merged_config)
+                    return merged_config
+                else:
+                    # テンプレートがない場合はデフォルト設定を使用
+                    logger.info("デフォルト設定を使用します")
+                    if default_config:
+                        self.save_config(default_config)
+                    return default_config.copy()
                 
         except json.JSONDecodeError as e:
             logger.error(f"設定ファイルJSON解析エラー: {self.config_path} - {e}")
@@ -212,18 +256,20 @@ class ConfigManager:
 
 def load_json_config(config_path: Union[str, Path], 
                      default_config: Optional[Dict[str, Any]] = None,
-                     encoding: str = 'utf-8') -> Dict[str, Any]:
+                     encoding: str = 'utf-8',
+                     template_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
     """JSON設定ファイルを読み込み（関数版）
     
     Args:
         config_path: 設定ファイルパス
         default_config: デフォルト設定辞書
         encoding: ファイルエンコーディング
+        template_path: テンプレートファイルパス
         
     Returns:
         設定辞書
     """
-    config_manager = ConfigManager(config_path, encoding)
+    config_manager = ConfigManager(config_path, encoding, template_path)
     return config_manager.load_config(default_config)
 
 

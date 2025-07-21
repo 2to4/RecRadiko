@@ -1,17 +1,13 @@
 {
-  "version": "2.0",
-  "prefecture": "東京",
+  "prefecture": "東京都",
+  "premium_username": "",
+  "premium_password": "",
+  "log_level": "INFO",
+  "request_timeout": 30,
+  "max_retries": 3,
   "audio": {
     "format": "mp3",
     "bitrate": 256,
     "sample_rate": 48000
-  },
-  "recording": {
-    "timeout_seconds": 30,
-    "max_retries": 3
-  },
-  "system": {
-    "log_level": "INFO",
-    "user_agent": "RecRadiko/2.0"
   }
 }

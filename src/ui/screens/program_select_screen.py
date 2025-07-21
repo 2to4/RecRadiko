@@ -199,7 +199,7 @@ class ProgramSelectScreen(ScreenBase):
         """Display program selection content"""
         if not self.selected_station or not self.selected_date:
             self.ui_service.display_error(
-                "放送局または日付が選択されていません。\\n"
+                "放送局または日付が選択されていません。\n"
                 "メインメニューから録音を開始してください。"
             )
             self.ui_service.keyboard_handler.get_key()
@@ -213,7 +213,7 @@ class ProgramSelectScreen(ScreenBase):
         date_str = self.selected_date.strftime('%Y年%m月%d日')
         total_programs = len(self.programs)
         
-        print(f"\\n放送局: {station_name}")
+        print(f"\n放送局: {station_name}")
         print(f"日付: {date_str}")
         print(f"番組数: {total_programs}番組")
         
@@ -225,8 +225,8 @@ class ProgramSelectScreen(ScreenBase):
         
         # 全番組表示またはページング表示
         if self.show_all_programs:
-            print("\\n📺 全番組表示")
-            print("\\n番組を選択してください:\\n")
+            print("\n📺 全番組表示")
+            print("\n番組を選択してください:\n")
             
             # 全番組を表示
             program_displays = [self.format_program_for_display(prog) for prog in self.programs]
@@ -239,13 +239,13 @@ class ProgramSelectScreen(ScreenBase):
             self.ui_service.set_menu_items(program_displays)
             self.ui_service.display_menu_with_highlight()
             
-            print(f"\\n💡 操作方法: ↑↓キーで選択、Enterで確定")
+            print(f"\n💡 操作方法: ↑↓キーで選択、Enterで確定")
                 
         else:
             # ページング表示
             total_pages = self.get_total_pages()
-            print(f"\\n📄 ページ表示 ({self.get_pagination_info()})")
-            print("\\n番組を選択してください:\\n")
+            print(f"\n📄 ページ表示 ({self.get_pagination_info()})")
+            print("\n番組を選択してください:\n")
             
             # 現在のページの番組を表示
             page_programs = self.get_current_page_programs()
@@ -270,7 +270,7 @@ class ProgramSelectScreen(ScreenBase):
             self.ui_service.set_menu_items(program_displays)
             self.ui_service.display_menu_with_highlight()
             
-            print(f"\\n💡 操作方法: ↑↓キーで選択、Enterで確定")
+            print(f"\n💡 操作方法: ↑↓キーで選択、Enterで確定")
             
     def run_program_selection_loop(self) -> Optional[Dict[str, Any]]:
         """
@@ -460,7 +460,7 @@ class ProgramSelectScreen(ScreenBase):
         Args:
             program: Program dictionary
         """
-        print(f"\\n番組詳細情報")
+        print(f"\n番組詳細情報")
         print("=" * 20)
         print(f"番組名: {program.get('title', '')}")
         display_start_time = program.get('display_start_time', program.get('start_time', ''))
@@ -473,7 +473,7 @@ class ProgramSelectScreen(ScreenBase):
         if 'description' in program and program['description']:
             print(f"番組内容: {program['description']}")
             
-        print("\\n任意のキーを押して続行...")
+        print("\n任意のキーを押して続行...")
         self.ui_service.keyboard_handler.get_key()
         
     def handle_shortcut_key(self, key: str) -> bool:
@@ -529,7 +529,7 @@ class ProgramSelectScreen(ScreenBase):
         
     def show_help(self) -> None:
         """Show help information"""
-        print("\\n📺 番組選択ヘルプ")
+        print("\n📺 番組選択ヘルプ")
         print("=" * 30)
         print("🎯 基本操作:")
         print("  ↑/↓キー : 番組選択・メニュー移動")
@@ -537,7 +537,7 @@ class ProgramSelectScreen(ScreenBase):
         print("  Escキー : 戻る")
         print("  Hキー   : このヘルプ")
         
-        print("\\n📱 メニュー操作:")
+        print("\n📱 メニュー操作:")
         print("  メニューに表示される項目を↑↓キーで選択:")
         
         if self.show_all_programs:
@@ -554,7 +554,7 @@ class ProgramSelectScreen(ScreenBase):
                     print("  • ➡️ 次のページ - 次のページに移動")
             print("  • 📺 全番組表示に切り替え - 1日分すべて表示")
         
-        print("\\n💡 表示モード:")
+        print("\n💡 表示モード:")
         if self.show_all_programs:
             print("  現在: 📺 全番組表示 (1日分すべて表示)")
             print(f"  - {len(self.programs)}番組すべてを一度に表示")
@@ -564,22 +564,22 @@ class ProgramSelectScreen(ScreenBase):
             print(f"  - 現在 {self.current_page + 1}/{self.get_total_pages()} ページ")
             print("  - メニューで簡単にページ移動")
         
-        print("\\n🔍 その他:")
+        print("\n🔍 その他:")
         print("  Iキー   : 番組詳細情報")
         print("  Rキー   : 番組リスト更新")
         
-        print("\\n任意のキーを押して続行...")
+        print("\n任意のキーを押して続行...")
         self.ui_service.keyboard_handler.get_key()
         
     def display_loading_message(self) -> None:
         """Display loading message"""
-        print("\\n番組情報を読み込み中...")
+        print("\n番組情報を読み込み中...")
         print("しばらくお待ちください...")
         
     def display_no_programs_message(self) -> None:
         """Display no programs available message"""
         self.ui_service.display_error(
-            "この日付・放送局では番組が見つかりませんでした。\\n"
+            "この日付・放送局では番組が見つかりませんでした。\n"
             "日付や放送局を変更してください。"
         )
         self.ui_service.keyboard_handler.get_key()
