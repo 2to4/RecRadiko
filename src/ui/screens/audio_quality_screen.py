@@ -33,13 +33,13 @@ class AudioQualityScreen(ScreenBase):
         # 統一設定管理を使用
         self.config_manager = ConfigManager(config_file)
         
-        # 音質オプションを定義
+        # 音質オプションを定義（Phase 8拡張: 4→8オプション）
         self.audio_options = [
             {
                 "display": "MP3 128kbps, 44kHz",
                 "format": "mp3",
                 "bitrate": 128,
-                "sample_rate": 44000,
+                "sample_rate": 44100,
                 "description": "標準品質 - ファイルサイズ小"
             },
             {
@@ -50,10 +50,24 @@ class AudioQualityScreen(ScreenBase):
                 "description": "高品質 - 推奨設定"
             },
             {
+                "display": "MP3 320kbps, 48kHz",
+                "format": "mp3",
+                "bitrate": 320,
+                "sample_rate": 48000,
+                "description": "超高品質 - 最高固定ビットレート"
+            },
+            {
+                "display": "MP3 VBR V0, 48kHz",
+                "format": "mp3",
+                "bitrate": "VBR_V0",
+                "sample_rate": 48000,
+                "description": "可変最高品質 - 平均~245kbps"
+            },
+            {
                 "display": "AAC 128kbps, 44kHz",
                 "format": "aac",
                 "bitrate": 128,
-                "sample_rate": 44000,
+                "sample_rate": 44100,
                 "description": "AAC標準品質"
             },
             {
@@ -62,6 +76,20 @@ class AudioQualityScreen(ScreenBase):
                 "bitrate": 256,
                 "sample_rate": 48000,
                 "description": "AAC高品質"
+            },
+            {
+                "display": "AAC 320kbps, 48kHz",
+                "format": "aac",
+                "bitrate": 320,
+                "sample_rate": 48000,
+                "description": "AAC超高品質 - 最高固定ビットレート"
+            },
+            {
+                "display": "AAC VBR ~256kbps, 48kHz",
+                "format": "aac",
+                "bitrate": "VBR_HQ",
+                "sample_rate": 48000,
+                "description": "AAC可変高品質 - 平均~256kbps"
             }
         ]
         
@@ -89,7 +117,15 @@ class AudioQualityScreen(ScreenBase):
         current_sample_rate = current_audio.get("sample_rate", 48000)
         
         # 現在の設定を人間が読める形式で表示
-        current_display = f"{current_format.upper()} {current_bitrate}kbps, {current_sample_rate//1000}kHz"
+        if isinstance(current_bitrate, str):  # VBRオプション
+            if current_bitrate == "VBR_V0":
+                current_display = f"{current_format.upper()} VBR V0, {current_sample_rate//1000}kHz"
+            elif current_bitrate == "VBR_HQ":
+                current_display = f"{current_format.upper()} VBR ~256kbps, {current_sample_rate//1000}kHz"
+            else:
+                current_display = f"{current_format.upper()} {current_bitrate}, {current_sample_rate//1000}kHz"
+        else:  # 固定ビットレート
+            current_display = f"{current_format.upper()} {current_bitrate}kbps, {current_sample_rate//1000}kHz"
         print(f"現在の設定: {current_display}")
         print("")
     
@@ -104,7 +140,7 @@ class AudioQualityScreen(ScreenBase):
         
         menu_items = []
         for option in self.audio_options:
-            # 現在の設定かどうかをチェック
+            # 現在の設定かどうかをチェック（VBR対応）
             is_current = (
                 option["format"] == current_format and
                 option["bitrate"] == current_bitrate and

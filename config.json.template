@@ -8,6 +8,7 @@
   "audio": {
     "format": "mp3",
     "bitrate": 256,
-    "sample_rate": 48000
+    "sample_rate": 48000,
+    "_comment": "bitrate: 数値(128,256,320) または VBR文字列(VBR_V0,VBR_HQ)"
   }
 }

@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 from .auth import RadikoAuthenticator, AuthenticationError
 from .utils.base import LoggerMixin
+from .utils.config_utils import ConfigManager
 
 
 @dataclass
@@ -71,13 +72,15 @@ class TimeFreeRecorder(LoggerMixin):
     # Radiko タイムフリーAPI
     TIMEFREE_URL_API = "https://radiko.jp/v2/api/ts/playlist.m3u8"
     
-    def __init__(self, authenticator: RadikoAuthenticator):
+    def __init__(self, authenticator: RadikoAuthenticator, config_path: str = "config.json"):
         super().__init__()  # LoggerMixin初期化
         self.authenticator = authenticator
         self.max_workers = 8
         self.segment_timeout = 30
         self.retry_attempts = 3
         self.chunk_size = 8192
+        # Phase 8拡張: 設定管理追加
+        self.config_manager = ConfigManager(config_path)
     
     async def record_program(self, program_info: 'ProgramInfo', 
                            output_path: str) -> RecordingResult:
@@ -459,20 +462,43 @@ class TimeFreeRecorder(LoggerMixin):
             # 出力形式を拡張子から判定
             output_ext = Path(output_path).suffix.lower()
             
+            # 音質設定を読み込み（Phase 8拡張: VBR・320kbps対応）
+            config = self.config_manager.load_config({}) if hasattr(self, 'config_manager') else {}
+            audio_config = config.get('audio', {})
+            audio_format = audio_config.get('format', 'mp3')
+            audio_bitrate = audio_config.get('bitrate', 256)
+            audio_sample_rate = audio_config.get('sample_rate', 48000)
+            
             # FFmpegコマンド構築
-            if output_ext == '.mp3':
+            if output_ext == '.mp3' or audio_format == 'mp3':
                 codec = 'libmp3lame'
-                extra_args = ['-b:a', '256k']
-            elif output_ext == '.aac':
+                # VBRまたは固定ビットレート設定
+                if audio_bitrate == "VBR_V0":
+                    extra_args = ['-q:a', '0']  # VBR V0最高品質
+                elif isinstance(audio_bitrate, int):
+                    extra_args = ['-b:a', f'{audio_bitrate}k']  # 固定ビットレート
+                else:
+                    extra_args = ['-b:a', '256k']  # デフォルト
+            elif output_ext == '.aac' or audio_format == 'aac':
                 codec = 'aac'
-                extra_args = ['-b:a', '256k']
+                # VBRまたは固定ビットレート設定
+                if audio_bitrate == "VBR_HQ":
+                    extra_args = ['-q:a', '0.4']  # VBR高品質（~256kbps）
+                elif isinstance(audio_bitrate, int):
+                    extra_args = ['-b:a', f'{audio_bitrate}k']  # 固定ビットレート
+                else:
+                    extra_args = ['-b:a', '256k']  # デフォルト
             elif output_ext == '.wav':
                 codec = 'pcm_s16le'
                 extra_args = []
             else:
-                # デフォルトはMP3
+                # デフォルトはMP3 256kbps
                 codec = 'libmp3lame'
                 extra_args = ['-b:a', '256k']
+            
+            # サンプルレート設定
+            if audio_sample_rate and audio_sample_rate != 48000:
+                extra_args.extend(['-ar', str(audio_sample_rate)])
             
             # プログレス情報を取得するためのパイプを作成
             import tempfile
@@ -489,8 +515,13 @@ class TimeFreeRecorder(LoggerMixin):
                 output_path
             ]
             
-            self.logger.info(f"音声変換開始: {codec} -> {output_path}")
-            print("\n音声変換中...")
+            # 音質設定ログ出力
+            if isinstance(audio_bitrate, str):
+                bitrate_desc = audio_bitrate
+            else:
+                bitrate_desc = f"{audio_bitrate}kbps"
+            self.logger.info(f"音声変換開始: {codec} {bitrate_desc} {audio_sample_rate}Hz -> {output_path}")
+            print(f"\n音声変換中 ({codec.upper()} {bitrate_desc}, {audio_sample_rate//1000}kHz)...")
             
             # FFmpeg実行
             process = await asyncio.create_subprocess_exec(

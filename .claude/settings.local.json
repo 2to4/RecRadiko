@@ -14,7 +14,8 @@
       "Bash(sed:*)",
       "Bash(mv:*)",
       "Bash(git pull:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(ffmpeg:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
