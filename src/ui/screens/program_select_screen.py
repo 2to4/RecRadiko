@@ -12,7 +12,7 @@ Based on UI_SPECIFICATION.md:
 """
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any
 import math
 from src.ui.screen_base import ScreenBase
@@ -40,8 +40,7 @@ class ProgramSelectScreen(ScreenBase):
         self.selected_date: Optional[date] = None
         self.programs: List[Dict[str, Any]] = []
         self.current_page: int = 0
-        self.items_per_page: int = 20  # 20番組ずつ表示に増加
-        self.show_all_programs: bool = False  # 全番組表示フラグ
+        self.items_per_page: int = 15  # 15番組ずつ表示
         
         # ProgramInfoManagerを使用（番組表API直接アクセス）
         self.program_info_manager: Optional[ProgramInfoManager] = None
@@ -160,18 +159,45 @@ class ProgramSelectScreen(ScreenBase):
             self.logger.info(f"Calling fetch_program_guide for station {station_id} on {target_date}")
             program_infos = self.program_info_manager.fetch_program_guide(target_datetime, station_id)
             
-            # Separate regular programs and midnight programs
-            regular_programs = [p for p in program_infos if not p.is_midnight_program]
-            midnight_programs = [p for p in program_infos if p.is_midnight_program]
+            # 深夜番組の処理：当日の深夜番組は前日番組表に表示するため除外
+            # 深夜番組（0:00-4:59開始）を除外し、通常番組のみ表示
+            regular_programs = []
+            midnight_programs = []
             
-            # Sort programs by start time
-            regular_programs.sort(key=lambda x: x.start_time)
-            midnight_programs.sort(key=lambda x: x.start_time)
+            for prog in program_infos:
+                if prog.is_midnight_program:
+                    midnight_programs.append(prog)
+                    self.logger.debug(f"Midnight program excluded from today's list: {prog.title} at {prog.start_time}")
+                else:
+                    regular_programs.append(prog)
             
-            # Combine: regular programs first, then midnight programs at the end
-            program_infos = regular_programs + midnight_programs
+            # 通常番組のみを使用（深夜番組は除外）
+            program_infos = regular_programs
             
-            self.logger.info(f"API returned {len(program_infos)} program objects total")
+            self.logger.info(f"API returned {len(program_infos)} regular programs (excluded {len(midnight_programs)} midnight programs)")
+            
+            # 過去日の番組表の場合のみ、翌日の深夜番組を末尾に追加
+            today = date.today()
+            if target_date < today:
+                next_day_midnight_programs = self._get_next_day_midnight_programs(station_id, target_date)
+                if next_day_midnight_programs:
+                    self.logger.info(f"Adding {len(next_day_midnight_programs)} next-day midnight programs to {target_date}'s schedule")
+                    program_infos.extend(next_day_midnight_programs)
+                    
+                    # 通常番組と深夜番組を分けてソート（深夜番組は末尾に配置）
+                    regular_programs = [p for p in program_infos if not p.is_midnight_program]
+                    midnight_programs = [p for p in program_infos if p.is_midnight_program]
+                    
+                    # それぞれを時刻順でソート
+                    regular_programs.sort(key=lambda x: x.start_time)
+                    midnight_programs.sort(key=lambda x: x.start_time)
+                    
+                    # 通常番組 + 深夜番組の順で結合（深夜番組が末尾に）
+                    program_infos = regular_programs + midnight_programs
+            else:
+                # 今日の番組表の場合は通常番組のみを時系列順でソート
+                program_infos.sort(key=lambda x: x.start_time)
+                self.logger.info(f"Today's schedule ({target_date}): not adding next-day midnight programs")
             
             if not program_infos:
                 self.logger.warning(f"No program info objects returned from API for {station_id} on {target_date}")
@@ -181,15 +207,17 @@ class ProgramSelectScreen(ScreenBase):
             programs = []
             for i, prog in enumerate(program_infos):
                 try:
-                    # For midnight programs, show them as belonging to the previous day
+                    # 深夜番組の表示日付処理
+                    display_title = prog.title
+                    
                     if prog.is_midnight_program:
-                        # This is a midnight program
-                        display_title = prog.title
-                        display_date = prog.display_date
-                        self.logger.debug(f"Midnight program: {prog.title} on {display_date}")
+                        # 深夜番組は前日の日付で表示（ユーザー体験向上）
+                        display_date = (prog.start_time.date() - timedelta(days=1)).strftime('%Y-%m-%d')
+                        self.logger.debug(f"Midnight program: {prog.title} displayed as {display_date} (actual: {prog.start_time.date()})")
                     else:
-                        display_title = prog.title
+                        # 通常番組は実際の放送日で表示
                         display_date = prog.start_time.date().strftime('%Y-%m-%d')
+                        self.logger.debug(f"Regular program: {prog.title} on {display_date}")
                     
                     program_dict = {
                         'id': prog.program_id,
@@ -211,16 +239,14 @@ class ProgramSelectScreen(ScreenBase):
                     self.logger.error(f"Error converting program {i} to dict: {prog_e}")
                     continue
             
-            # Sort programs by maintaining regular programs first, then midnight programs
-            regular_programs = [p for p in programs if not p.get('is_midnight', False)]
-            midnight_programs = [p for p in programs if p.get('is_midnight', False)]
-            
-            # Sort each group by start time
-            regular_programs.sort(key=lambda x: x['start_time'])
-            midnight_programs.sort(key=lambda x: x['start_time'])
-            
-            # Combine: regular programs first, then midnight programs at the end
-            programs = regular_programs + midnight_programs
+            # 深夜番組を含む場合は通常番組＋深夜番組の順序を保持、そうでなければ時刻順でソート
+            has_midnight = any(p.get('is_midnight', False) for p in programs)
+            if has_midnight:
+                # 深夜番組がある場合：通常番組＋深夜番組の順序を保持（既にソート済み）
+                pass
+            else:
+                # 深夜番組がない場合：時刻順でソート
+                programs.sort(key=lambda x: x['start_time'])
             
             self.logger.info(f"Successfully converted {len(programs)} programs to dictionary format")
             return programs
@@ -228,6 +254,35 @@ class ProgramSelectScreen(ScreenBase):
         except Exception as e:
             self.logger.error(f"Error in _fetch_programs_from_api: {e}", exc_info=True)
             raise  # Re-raise the exception to be handled by calling method
+    
+    def _get_next_day_midnight_programs(self, station_id: str, target_date: date) -> List[Any]:
+        """
+        翌日の深夜番組を取得
+        前日の番組表末尾に表示するため
+        """
+        try:
+            # 翌日の日付を計算
+            next_day = target_date + timedelta(days=1)
+            next_day_datetime = datetime.combine(next_day, datetime.min.time())
+            
+            self.logger.debug(f"Fetching next day midnight programs for {next_day}")
+            
+            # 翌日の全番組を取得
+            next_day_programs = self.program_info_manager.fetch_program_guide(next_day_datetime, station_id)
+            
+            # 深夜番組のみを抽出
+            midnight_programs = [prog for prog in next_day_programs if prog.is_midnight_program]
+            
+            if midnight_programs:
+                self.logger.info(f"Found {len(midnight_programs)} midnight programs for {next_day}")
+                for prog in midnight_programs:
+                    self.logger.debug(f"Next day midnight program: {prog.title} at {prog.start_time}")
+            
+            return midnight_programs
+            
+        except Exception as e:
+            self.logger.error(f"Error fetching next day midnight programs: {e}")
+            return []
         
     def display_content(self) -> None:
         """Display program selection content"""
@@ -250,61 +305,33 @@ class ProgramSelectScreen(ScreenBase):
         print(f"\n放送局: {station_name}")
         print(f"日付: {date_str}")
         print(f"番組数: {total_programs}番組")
-        
-        # 番組数が少ない場合（30番組以下）は自動的に全表示
-        if total_programs <= 30:
-            self.show_all_programs = True
-            
         print("=" * 40)
         
-        # 全番組表示またはページング表示
-        if self.show_all_programs:
-            print("\n📺 全番組表示")
-            print("\n番組を選択してください:\n")
-            
-            # 全番組を表示
-            program_displays = [self.format_program_for_display(prog) for prog in self.programs]
-            
-            # ページ表示モード切り替えオプションを追加（30番組以上の場合）
-            if total_programs > 30:
-                program_displays.append("═══════════════════════")
-                program_displays.append("📄 ページ表示に切り替え")
-            
-            self.ui_service.set_menu_items(program_displays)
-            self.ui_service.display_menu_with_highlight()
-            
-            print(f"\n💡 操作方法: ↑↓キーで選択、Enterで確定")
-                
-        else:
-            # ページング表示
-            total_pages = self.get_total_pages()
-            print(f"\n📄 ページ表示 ({self.get_pagination_info()})")
-            print("\n番組を選択してください:\n")
-            
-            # 現在のページの番組を表示
-            page_programs = self.get_current_page_programs()
-            program_displays = [self.format_program_for_display(prog) for prog in page_programs]
-            
-            # ページ移動オプションを番組リストに追加
-            if total_pages > 1:
-                program_displays.append("═══════════════════════")
-                
-                # 前のページオプション（最初のページでなければ表示）
-                if self.current_page > 0:
-                    program_displays.append("⬅️ 前のページ")
-                
-                # 次のページオプション（最後のページでなければ表示）
-                if self.current_page < total_pages - 1:
-                    program_displays.append("➡️ 次のページ")
-            
-            # 全表示切り替えオプションを追加
+        # ページング表示
+        total_pages = self.get_total_pages()
+        print(f"\n📄 ページ表示 ({self.get_pagination_info()})")
+        print("\n番組を選択してください:\n")
+        
+        # 現在のページの番組を表示
+        page_programs = self.get_current_page_programs()
+        program_displays = [self.format_program_for_display(prog) for prog in page_programs]
+        
+        # ページ移動オプションを番組リストに追加
+        if total_pages > 1:
             program_displays.append("═══════════════════════")
-            program_displays.append("📺 全番組表示に切り替え")
             
-            self.ui_service.set_menu_items(program_displays)
-            self.ui_service.display_menu_with_highlight()
+            # 前のページオプション（最初のページでなければ表示）
+            if self.current_page > 0:
+                program_displays.append("⬅️ 前のページ")
             
-            print(f"\n💡 操作方法: ↑↓キーで選択、Enterで確定")
+            # 次のページオプション（最後のページでなければ表示）
+            if self.current_page < total_pages - 1:
+                program_displays.append("➡️ 次のページ")
+        
+        self.ui_service.set_menu_items(program_displays)
+        self.ui_service.display_menu_with_highlight()
+        
+        print(f"\n💡 操作方法: ↑↓キーで選択、Enterで確定")
             
     def run_program_selection_loop(self) -> Optional[Dict[str, Any]]:
         """
@@ -327,19 +354,7 @@ class ProgramSelectScreen(ScreenBase):
                 return None
             
             # 特殊なメニュー項目かどうかをチェック
-            if selected_display == "📄 ページ表示に切り替え":
-                # 全表示からページ表示に切り替え
-                self.show_all_programs = False
-                self.ui_service.display_status("ページ表示に切り替えました")
-                continue
-                
-            elif selected_display == "📺 全番組表示に切り替え":
-                # ページ表示から全表示に切り替え
-                self.show_all_programs = True
-                self.ui_service.display_status("全番組表示に切り替えました")
-                continue
-                
-            elif selected_display == "➡️ 次のページ":
+            if selected_display == "➡️ 次のページ":
                 # 次のページに移動
                 if self.next_page():
                     self.ui_service.display_status(f"ページ {self.current_page + 1} に移動しました")
@@ -403,8 +418,6 @@ class ProgramSelectScreen(ScreenBase):
         # 特殊なメニュー項目は番組検索から除外
         special_items = [
             "═══════════════════════",
-            "📄 ページ表示に切り替え",
-            "📺 全番組表示に切り替え",
             "➡️ 次のページ",
             "⬅️ 前のページ"
         ]
@@ -412,11 +425,8 @@ class ProgramSelectScreen(ScreenBase):
         if display_text in special_items:
             return None
         
-        # 全表示モードか現在のページかに応じて検索範囲を決定
-        if self.show_all_programs:
-            search_programs = self.programs
-        else:
-            search_programs = self.get_current_page_programs()
+        # 現在のページの番組から検索
+        search_programs = self.get_current_page_programs()
         
         for program in search_programs:
             if self.format_program_for_display(program) == display_text:
@@ -573,30 +583,19 @@ class ProgramSelectScreen(ScreenBase):
         
         print("\n📱 メニュー操作:")
         print("  メニューに表示される項目を↑↓キーで選択:")
+        print("  • 番組名 - 録音する番組を選択")
         
-        if self.show_all_programs:
-            print("  • 番組名 - 録音する番組を選択")
-            if len(self.programs) > 30:
-                print("  • 📄 ページ表示に切り替え - ページ分割表示に変更")
-        else:
-            print("  • 番組名 - 録音する番組を選択")
-            total_pages = self.get_total_pages()
-            if total_pages > 1:
-                if self.current_page > 0:
-                    print("  • ⬅️ 前のページ - 前のページに移動")
-                if self.current_page < total_pages - 1:
-                    print("  • ➡️ 次のページ - 次のページに移動")
-            print("  • 📺 全番組表示に切り替え - 1日分すべて表示")
+        total_pages = self.get_total_pages()
+        if total_pages > 1:
+            if self.current_page > 0:
+                print("  • ⬅️ 前のページ - 前のページに移動")
+            if self.current_page < total_pages - 1:
+                print("  • ➡️ 次のページ - 次のページに移動")
         
         print("\n💡 表示モード:")
-        if self.show_all_programs:
-            print("  現在: 📺 全番組表示 (1日分すべて表示)")
-            print(f"  - {len(self.programs)}番組すべてを一度に表示")
-            print("  - 長いリストもスクロールで確認可能")
-        else:
-            print(f"  現在: 📄 ページ表示 ({self.items_per_page}番組ずつ)")
-            print(f"  - 現在 {self.current_page + 1}/{self.get_total_pages()} ページ")
-            print("  - メニューで簡単にページ移動")
+        print(f"  📄 ページ表示 ({self.items_per_page}番組ずつ)")
+        print(f"  - 現在 {self.current_page + 1}/{self.get_total_pages()} ページ")
+        print("  - メニューで簡単にページ移動")
         
         print("\n🔍 その他:")
         print("  Iキー   : 番組詳細情報")

@@ -72,8 +72,8 @@ class Program:
     
     @property
     def is_midnight_program(self) -> bool:
-        """深夜番組かどうか（0:00-5:59開始の番組）"""
-        return self.start_time.hour < 6
+        """深夜番組かどうか（0:00-4:59開始の番組）"""
+        return self.start_time.hour < 5
     
     @property
     def display_start_time(self) -> str:
@@ -191,8 +191,8 @@ class ProgramInfo:
     
     @property
     def is_midnight_program(self) -> bool:
-        """深夜番組かどうか（0:00-5:59開始の番組）"""
-        return self.start_time.hour < 6
+        """深夜番組かどうか（0:00-4:59開始の番組）"""
+        return self.start_time.hour < 5
     
     @property
     def display_date(self) -> str:
