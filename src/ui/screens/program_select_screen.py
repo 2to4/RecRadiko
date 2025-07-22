@@ -12,11 +12,13 @@ Based on UI_SPECIFICATION.md:
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, List, Dict, Any
 import math
 from src.ui.screen_base import ScreenBase
 from src.program_history import ProgramHistoryManager
+from src.program_info import ProgramInfoManager
+from src.auth import RadikoAuthenticator
 
 
 class ProgramSelectScreen(ScreenBase):
@@ -40,6 +42,34 @@ class ProgramSelectScreen(ScreenBase):
         self.current_page: int = 0
         self.items_per_page: int = 20  # 20番組ずつ表示に増加
         self.show_all_programs: bool = False  # 全番組表示フラグ
+        
+        # ProgramInfoManagerを使用（番組表API直接アクセス）
+        self.program_info_manager: Optional[ProgramInfoManager] = None
+        self.authenticator: Optional[RadikoAuthenticator] = None
+        self._initialize_managers()
+    
+    def _initialize_managers(self) -> None:
+        """マネージャー初期化"""
+        try:
+            # Radiko認証
+            self.authenticator = RadikoAuthenticator()
+            auth_info = self.authenticator.authenticate()
+            
+            if not auth_info or not auth_info.auth_token:
+                self.logger.error("Radiko認証に失敗しました")
+                return
+            
+            # ProgramInfoManager初期化
+            self.program_info_manager = ProgramInfoManager(
+                area_id=auth_info.area_id,
+                authenticator=self.authenticator
+            )
+            
+            self.logger.info(f"ProgramInfoManager初期化完了 - エリア: {auth_info.area_id}")
+            
+        except Exception as e:
+            self.logger.error(f"マネージャー初期化エラー: {e}")
+            self.program_info_manager = None
         
     def set_station_and_date(self, station: Dict[str, Any], target_date: date) -> None:
         """
@@ -115,16 +145,20 @@ class ProgramSelectScreen(ScreenBase):
             List of program dictionaries
         """
         try:
-            self.logger.debug(f"Initializing ProgramHistoryManager for station_id: {station_id}, target_date: {target_date}")
-            program_history_manager = ProgramHistoryManager()
+            # ProgramInfoManagerが初期化されているか確認
+            if not self.program_info_manager:
+                self.logger.error("ProgramInfoManagerが初期化されていません")
+                return []
             
-            # Convert date to string format (YYYY-MM-DD)
-            date_str = target_date.strftime('%Y-%m-%d')
-            self.logger.debug(f"Converted date to string: {date_str}")
+            self.logger.debug(f"Using ProgramInfoManager for station_id: {station_id}, target_date: {target_date}")
             
-            # Get ProgramInfo objects from API for the specified date
-            self.logger.info(f"Calling get_programs_by_date for station {station_id} on {date_str}")
-            program_infos = program_history_manager.get_programs_by_date(date_str, station_id)
+            # dateをdatetimeに変換
+            target_datetime = datetime.combine(target_date, datetime.min.time())
+            self.logger.debug(f"Converted date to datetime: {target_datetime}")
+            
+            # ProgramInfoManagerから番組表を取得
+            self.logger.info(f"Calling fetch_program_guide for station {station_id} on {target_date}")
+            program_infos = self.program_info_manager.fetch_program_guide(target_datetime, station_id)
             
             # Separate regular programs and midnight programs
             regular_programs = [p for p in program_infos if not p.is_midnight_program]
@@ -140,7 +174,7 @@ class ProgramSelectScreen(ScreenBase):
             self.logger.info(f"API returned {len(program_infos)} program objects total")
             
             if not program_infos:
-                self.logger.warning(f"No program info objects returned from API for {station_id} on {date_str}")
+                self.logger.warning(f"No program info objects returned from API for {station_id} on {target_date}")
                 return []
             
             # Convert ProgramInfo objects to dictionary format for UI

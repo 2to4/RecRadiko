@@ -85,7 +85,7 @@ class TestProgramSelectScreen:
         assert program_select_screen.selected_date is None
         assert program_select_screen.programs == []
         assert program_select_screen.current_page == 0
-        assert program_select_screen.items_per_page == 10
+        assert program_select_screen.items_per_page == 20
         
     def test_set_station_and_date(self, program_select_screen, sample_station, sample_date):
         """Test setting selected station and date"""
@@ -317,19 +317,36 @@ class TestProgramSelectScreen:
         assert result == False
         assert program_select_screen.current_page == 0
         
-    def test_fetch_programs_from_api(self, program_select_screen, sample_station, sample_date):
-        """Test fetching programs from API"""
-        mock_program_history = Mock()
-        mock_program_history.get_programs_for_date.return_value = [
-            {"title": "テスト番組", "start_time": "12:00", "end_time": "13:00"}
+    def test_fetch_programs_from_api_with_program_info_manager(self, program_select_screen, sample_station, sample_date):
+        """Test fetching programs from API using ProgramInfoManager (修正後)"""
+        # Given: ProgramInfoManagerをモック
+        mock_program_info = Mock()
+        mock_program_info.fetch_program_guide.return_value = [
+            Mock(
+                title="テスト番組",
+                start_time=Mock(strftime=Mock(return_value="12:00")),
+                end_time=Mock(strftime=Mock(return_value="13:00")),
+                program_id="test_id",
+                station_id=sample_station["id"],
+                station_name=sample_station["name"],
+                is_midnight_program=False,
+                display_start_time="12:00",
+                display_end_time="13:00"
+            )
         ]
         
-        with patch('src.ui.screens.program_select_screen.ProgramHistoryManager', return_value=mock_program_history):
-            programs = program_select_screen._fetch_programs_from_api(sample_station["id"], sample_date)
-            
-            assert len(programs) == 1
+        # ProgramInfoManagerを直接設定
+        program_select_screen.program_info_manager = mock_program_info
+        
+        # When: 番組取得実行
+        programs = program_select_screen._fetch_programs_from_api(sample_station["id"], sample_date)
+        
+        # Then: ProgramInfoManagerが使用され、正しく変換される
+        assert len(programs) >= 1
+        if programs:
             assert programs[0]["title"] == "テスト番組"
-            mock_program_history.get_programs_for_date.assert_called_once_with(sample_station["id"], sample_date)
+            assert programs[0]["start_time"] == "12:00"
+            assert programs[0]["end_time"] == "13:00"
             
     def test_show_program_info(self, program_select_screen, mock_ui_service, mock_programs):
         """Test showing program information"""

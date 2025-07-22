@@ -205,20 +205,19 @@ class RealEnvironmentTestBase:
     モック使用最小限（10%以下）、実ファイル・実データベース・実暗号化処理を使用。
     """
     
-    def setUp(self):
+    def setup_real_environment(self):
         """実環境テストセットアップ"""
-        # 実ファイルシステム使用
-        # 実SQLiteデータベース使用
-        # 実暗号化処理使用
-        # 一時ディレクトリ管理
-        pass
-    
-    def tearDown(self):
+        # 一時環境作成
+        self.temp_env = TemporaryTestEnvironment()
+        self.temp_env.__enter__()
+        
+        # テスト用設定ファイル作成
+        self.config_file = str(self.temp_env.config_file)
+        
+    def cleanup_real_environment(self):
         """実環境テストクリーンアップ"""
-        # リソース解放
-        # 一時ファイル削除
-        # データベース閉鎖
-        pass
+        if hasattr(self, 'temp_env'):
+            self.temp_env.__exit__(None, None, None)
     
     def setup_real_authenticator(self, temp_env: TemporaryTestEnvironment) -> RadikoAuthenticator:
         """実環境認証器セットアップ"""

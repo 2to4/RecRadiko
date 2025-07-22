@@ -70,6 +70,68 @@ class Program:
     def duration_minutes(self) -> int:
         return self.duration
     
+    @property
+    def is_midnight_program(self) -> bool:
+        """深夜番組かどうか（0:00-5:59開始の番組）"""
+        return self.start_time.hour < 6
+    
+    @property
+    def display_start_time(self) -> str:
+        """表示用開始時刻（深夜番組は24時間表示）"""
+        if self.is_midnight_program:
+            # 深夜番組は24時間を足して表示（例：01:00 → 25:00）
+            display_hour = self.start_time.hour + 24
+            return f"{display_hour:02d}:{self.start_time.minute:02d}"
+        else:
+            return self.start_time.strftime('%H:%M')
+    
+    @property
+    def display_end_time(self) -> str:
+        """表示用終了時刻（深夜番組は24時間表示）"""
+        # 終了時刻が開始時刻よりも前の場合、翌日として処理
+        end_time = self.end_time
+        if end_time <= self.start_time:
+            end_time = end_time + timedelta(days=1)
+            
+        if self.is_midnight_program:
+            # 深夜番組は24時間を足して表示
+            display_hour = end_time.hour + 24 if end_time.hour < 6 else end_time.hour
+            return f"{display_hour:02d}:{end_time.minute:02d}"
+        else:
+            return end_time.strftime('%H:%M')
+    
+    @property
+    def display_date(self) -> str:
+        """番組表上の表示日付（深夜番組は前日扱い）"""
+        if self.is_midnight_program:
+            # 深夜番組は前日の日付として扱う
+            display_date = self.start_time.date() - timedelta(days=1)
+        else:
+            display_date = self.start_time.date()
+        return display_date.strftime('%Y-%m-%d')
+    
+    @property
+    def program_id(self) -> str:
+        """ProgramInfoクラスとの互換性のためのプロパティ"""
+        return self.id
+    
+    @property  
+    def station_name(self) -> str:
+        """放送局名（station_idから推定）"""
+        station_names = {
+            'TBS': 'TBSラジオ',
+            'QRR': '文化放送', 
+            'LFR': 'ニッポン放送',
+            'RN1': 'ラジオNIKKEI第1',
+            'RN2': 'ラジオNIKKEI第2',
+            'INT': 'InterFM897',
+            'FMT': 'TOKYO FM',
+            'FMJ': 'J-WAVE',
+            'BAYFM': 'bayfm78',
+            'NACK5': 'NACK5'
+        }
+        return station_names.get(self.station_id, self.station_id)
+    
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         data['start_time'] = self.start_time.isoformat()
