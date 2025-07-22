@@ -21,9 +21,9 @@ from datetime import datetime, timedelta, date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from src.ui.screens.main_menu_screen import MainMenuScreen
-from src.ui.screens.search_screen import SearchScreen
+from src.ui.screens.program_select_screen import ProgramSelectScreen
 from src.ui.screens.settings_screen import SettingsScreen
-from src.ui.screens.system_info_screen import SystemInfoScreen
+from src.ui.screens.date_select_screen import DateSelectScreen
 from src.ui.recording_workflow import RecordingWorkflow
 
 

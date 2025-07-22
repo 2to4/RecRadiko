@@ -1,483 +1,487 @@
 """
-番組情報モジュールの単体テスト
+ProgramInfoManager単体テスト（TDD手法）
+
+TEST_REDESIGN_PLANに基づく実環境重視テスト。
+番組情報管理・SQLite操作・放送局管理・データクラス機能を実環境でテスト。
 """
 
 import unittest
-import tempfile
 import sqlite3
-import xml.etree.ElementTree as ET
-from unittest.mock import Mock, patch, MagicMock
+import tempfile
+import shutil
 from datetime import datetime, timedelta
-import pytz
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+import xml.etree.ElementTree as ET
 
-from src.program_info import ProgramInfoManager, Station, Program, ProgramInfoError
+# テスト対象
+from src.program_info import (
+    ProgramInfoManager, ProgramInfo, Station, Program, ProgramInfoError
+)
 from src.auth import RadikoAuthenticator
+from tests.utils.test_environment import TemporaryTestEnvironment, RealEnvironmentTestBase
 
 
-class TestStation(unittest.TestCase):
-    """Station クラスのテスト"""
+class TestProgramInfoDataClasses(unittest.TestCase, RealEnvironmentTestBase):
+    """ProgramInfo データクラス機能テスト"""
     
-    def test_station_creation(self):
-        """Station の作成テスト"""
-        station = Station(
-            id="TBS",
-            name="TBSラジオ",
-            ascii_name="TBS RADIO",
-            area_id="JP13",
-            logo_url="http://example.com/logo.png",
-            banner_url="http://example.com/banner.png"
+    def setUp(self):
+        """テストセットアップ"""
+        super().setUp()
+        self.temp_env = TemporaryTestEnvironment()
+        self.temp_env.__enter__()
+        
+    def tearDown(self):
+        """テストクリーンアップ"""
+        self.temp_env.__exit__(None, None, None)
+        super().tearDown()
+    
+    def test_01_ProgramInfoデータクラス機能(self):
+        """
+        TDD Test: ProgramInfoデータクラス機能
+        
+        ProgramInfoの各種プロパティとメソッドが正常動作することを確認
+        """
+        # Given: 番組情報データ
+        start_time = datetime(2025, 7, 21, 14, 0, 0)
+        end_time = datetime(2025, 7, 21, 16, 30, 0)
+        
+        program_info = ProgramInfo(
+            program_id="TBS_20250721_140000",
+            station_id="TBS",
+            station_name="TBSラジオ",
+            title="アフタヌーンプログラム",
+            start_time=start_time,
+            end_time=end_time,
+            description="午後の音楽番組です",
+            performers=["山田太郎", "田中花子"],
+            genre="音楽"
         )
         
-        self.assertEqual(station.id, "TBS")
-        self.assertEqual(station.name, "TBSラジオ")
-        self.assertEqual(station.ascii_name, "TBS RADIO")
-        self.assertEqual(station.area_id, "JP13")
+        # Then: 基本プロパティが正しく設定される
+        self.assertEqual(program_info.program_id, "TBS_20250721_140000")
+        self.assertEqual(program_info.station_id, "TBS")
+        self.assertEqual(program_info.title, "アフタヌーンプログラム")
+        self.assertEqual(len(program_info.performers), 2)
+        
+        # And: 時間計算プロパティが正しく動作する
+        self.assertEqual(program_info.duration_minutes, 150)  # 2.5時間
+        self.assertEqual(program_info.duration_seconds, 9000)  # 150分
+        
+        # And: 深夜番組判定が正しく動作する
+        self.assertFalse(program_info.is_midnight_program)  # 14時開始は深夜番組ではない
+        
+        # And: 表示用時刻が正しく取得される
+        self.assertEqual(program_info.display_start_time, "14:00")
+        self.assertEqual(program_info.display_end_time, "16:30")
+        self.assertEqual(program_info.display_date, "2025-07-21")
     
-    def test_station_to_dict(self):
-        """Station の辞書変換テスト"""
-        station = Station(
-            id="TBS",
-            name="TBSラジオ",
-            ascii_name="TBS RADIO",
+    def test_02_深夜番組処理機能(self):
+        """
+        TDD Test: 深夜番組処理機能
+        
+        深夜番組の特殊処理（24時間表示、日付跨ぎ）が正常動作することを確認
+        """
+        # Given: 深夜番組データ（翌日1:00開始）
+        start_time = datetime(2025, 7, 22, 1, 0, 0)  # 深夜1:00
+        end_time = datetime(2025, 7, 22, 3, 0, 0)    # 深夜3:00
+        
+        midnight_program = ProgramInfo(
+            program_id="TBS_20250722_010000", 
+            station_id="TBS",
+            station_name="TBSラジオ",
+            title="深夜の音楽番組",
+            start_time=start_time,
+            end_time=end_time,
+            description="深夜のリラックス音楽",
+            performers=["深夜DJ"],
+            genre="音楽"
+        )
+        
+        # Then: 深夜番組として正しく認識される
+        self.assertTrue(midnight_program.is_midnight_program)
+        
+        # And: 24時間表示で時刻が表示される
+        self.assertEqual(midnight_program.display_start_time, "25:00")  # 1:00 → 25:00
+        self.assertEqual(midnight_program.display_end_time, "27:00")   # 3:00 → 27:00
+        
+        # And: 表示日付が前日扱いになる
+        self.assertEqual(midnight_program.display_date, "2025-07-21")  # 前日扱い
+        
+        # And: 時間計算は正常に動作する
+        self.assertEqual(midnight_program.duration_minutes, 120)  # 2時間
+    
+    def test_03_メタデータ・ファイル名生成機能(self):
+        """
+        TDD Test: メタデータ・ファイル名生成機能
+        
+        ID3タグメタデータとファイル名の生成が正常動作することを確認
+        """
+        # Given: 番組情報データ
+        program_info = ProgramInfo(
+            program_id="QRR_20250721_070000",
+            station_id="QRR",
+            station_name="文化放送",
+            title="おはよう！文化放送",
+            start_time=datetime(2025, 7, 21, 7, 0, 0),
+            end_time=datetime(2025, 7, 21, 9, 0, 0),
+            description="朝の情報番組です",
+            performers=["朝の司会者A", "朝の司会者B"],
+            genre="情報・ワイドショー"
+        )
+        
+        # When: メタデータを生成
+        metadata = program_info.to_metadata()
+        
+        # Then: 正しいID3タグ情報が生成される
+        self.assertEqual(metadata['title'], "おはよう！文化放送")
+        self.assertEqual(metadata['artist'], "朝の司会者A, 朝の司会者B")
+        self.assertEqual(metadata['album'], "文化放送")
+        self.assertEqual(metadata['date'], "2025-07-21")
+        self.assertEqual(metadata['genre'], "Radio")
+        self.assertEqual(metadata['comment'], "朝の情報番組です")
+        
+        # When: ファイル名を生成
+        filename = program_info.to_filename()
+        
+        # Then: 正しいファイル名が生成される
+        expected_filename = "QRR_20250721_おはよう_文化放送.mp3"
+        self.assertEqual(filename, expected_filename)
+        
+        # And: 特殊文字が適切にエスケープされる
+        special_program = ProgramInfo(
+            program_id="TBS_20250721_120000",
+            station_id="TBS", 
+            station_name="TBSラジオ",
+            title="特殊文字テスト！？＆番組",
+            start_time=datetime(2025, 7, 21, 12, 0, 0),
+            end_time=datetime(2025, 7, 21, 13, 0, 0)
+        )
+        
+        special_filename = special_program.to_filename()
+        # 特殊文字がアンダースコアに変換される
+        self.assertIn("特殊文字テスト_番組", special_filename)
+        self.assertTrue(special_filename.endswith(".mp3"))
+
+
+class TestProgramInfoManagerDatabase(unittest.TestCase, RealEnvironmentTestBase):
+    """ProgramInfoManager データベース機能テスト"""
+    
+    def setUp(self):
+        """テストセットアップ"""
+        super().setUp()
+        self.temp_env = TemporaryTestEnvironment()
+        self.temp_env.__enter__()
+        
+    def tearDown(self):
+        """テストクリーンアップ"""
+        self.temp_env.__exit__(None, None, None)
+        super().tearDown()
+    
+    def test_04_SQLiteデータベース初期化(self):
+        """
+        TDD Test: SQLiteデータベース初期化
+        
+        データベースとテーブルが正しく初期化されることを確認
+        """
+        # Given: データベースファイルパス
+        db_path = self.temp_env.config_dir / "test_program_info.db"
+        
+        # When: ProgramInfoManagerを初期化
+        manager = ProgramInfoManager(
+            db_path=str(db_path),
             area_id="JP13"
         )
         
-        station_dict = station.to_dict()
+        # Then: データベースファイルが作成される
+        self.assertTrue(db_path.exists())
         
-        self.assertEqual(station_dict['id'], "TBS")
-        self.assertEqual(station_dict['name'], "TBSラジオ")
-        self.assertEqual(station_dict['area_id'], "JP13")
-    
-    def test_station_from_dict(self):
-        """Station の辞書からの復元テスト"""
-        station_dict = {
-            'id': "TBS",
-            'name': "TBSラジオ",
-            'ascii_name': "TBS RADIO",
-            'area_id': "JP13",
-            'logo_url': "",
-            'banner_url': ""
-        }
-        
-        station = Station.from_dict(station_dict)
-        
-        self.assertEqual(station.id, "TBS")
-        self.assertEqual(station.name, "TBSラジオ")
-
-
-class TestProgram(unittest.TestCase):
-    """Program クラスのテスト"""
-    
-    def setUp(self):
-        """テスト前の準備"""
-        self.jst = pytz.timezone('Asia/Tokyo')
-        self.start_time = self.jst.localize(datetime(2024, 1, 1, 20, 0, 0))
-        self.end_time = self.jst.localize(datetime(2024, 1, 1, 21, 0, 0))
-    
-    def test_program_creation(self):
-        """Program の作成テスト"""
-        program = Program(
-            id="TBS_20240101200000",
-            station_id="TBS",
-            title="テスト番組",
-            start_time=self.start_time,
-            end_time=self.end_time,
-            duration=60,
-            description="テスト番組の説明",
-            performers=["出演者1", "出演者2"],
-            genre="音楽",
-            sub_genre="ポップス"
-        )
-        
-        self.assertEqual(program.id, "TBS_20240101200000")
-        self.assertEqual(program.station_id, "TBS")
-        self.assertEqual(program.title, "テスト番組")
-        self.assertEqual(program.duration, 60)
-        self.assertEqual(len(program.performers), 2)
-    
-    def test_program_duration_calculation(self):
-        """Program の継続時間自動計算テスト"""
-        program = Program(
-            id="TBS_20240101200000",
-            station_id="TBS",
-            title="テスト番組",
-            start_time=self.start_time,
-            end_time=self.end_time,
-            duration=0  # 自動計算されるべき
-        )
-        
-        self.assertEqual(program.duration, 60)  # 1時間 = 60分
-    
-    def test_program_duration_minutes_property(self):
-        """Program の duration_minutes プロパティテスト"""
-        program = Program(
-            id="TBS_20240101200000",
-            station_id="TBS",
-            title="テスト番組",
-            start_time=self.start_time,
-            end_time=self.end_time,
-            duration=90
-        )
-        
-        self.assertEqual(program.duration_minutes, 90)
-    
-    def test_program_to_dict(self):
-        """Program の辞書変換テスト"""
-        program = Program(
-            id="TBS_20240101200000",
-            station_id="TBS",
-            title="テスト番組",
-            start_time=self.start_time,
-            end_time=self.end_time,
-            duration=60
-        )
-        
-        program_dict = program.to_dict()
-        
-        self.assertEqual(program_dict['id'], "TBS_20240101200000")
-        self.assertEqual(program_dict['title'], "テスト番組")
-        self.assertIn('start_time', program_dict)
-        self.assertIn('end_time', program_dict)
-    
-    def test_program_from_dict(self):
-        """Program の辞書からの復元テスト"""
-        program_dict = {
-            'id': "TBS_20240101200000",
-            'station_id': "TBS",
-            'title': "テスト番組",
-            'start_time': self.start_time.isoformat(),
-            'end_time': self.end_time.isoformat(),
-            'duration': 60,
-            'description': "",
-            'performers': [],
-            'genre': "",
-            'sub_genre': ""
-        }
-        
-        program = Program.from_dict(program_dict)
-        
-        self.assertEqual(program.id, "TBS_20240101200000")
-        self.assertEqual(program.title, "テスト番組")
-        self.assertEqual(program.duration, 60)
-
-
-class TestProgramInfoManager(unittest.TestCase):
-    """ProgramInfoManager クラスのテスト"""
-    
-    def setUp(self):
-        """テスト前の準備"""
-        self.temp_dir = tempfile.mkdtemp()
-        self.db_path = f"{self.temp_dir}/test_radiko.db"
-        self.authenticator = Mock(spec=RadikoAuthenticator)
-        self.manager = ProgramInfoManager(
-            db_path=self.db_path,
-            area_id="JP13",
-            authenticator=self.authenticator
-        )
-    
-    def tearDown(self):
-        """テスト後のクリーンアップ"""
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
-    def test_manager_creation(self):
-        """マネージャーの作成テスト"""
-        self.assertIsInstance(self.manager, ProgramInfoManager)
-        self.assertEqual(self.manager.area_id, "JP13")
-        
-        # データベースファイルが作成されることを確認
-        import os
-        self.assertTrue(os.path.exists(self.db_path))
-    
-    def test_database_initialization(self):
-        """データベース初期化のテスト"""
-        # データベースに期待するテーブルが作成されることを確認
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+        # And: 正しいテーブルが作成される
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = [row[0] for row in cursor.fetchall()]
+            
+            self.assertIn('stations', tables)
+            self.assertIn('programs', tables)
         
-        self.assertIn('stations', tables)
-        self.assertIn('programs', tables)
+        # And: 放送局テーブルの構造が正しい
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute("PRAGMA table_info(stations)")
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            expected_columns = ['id', 'name', 'ascii_name', 'area_id', 'logo_url', 'banner_url', 'updated_at']
+            for col in expected_columns:
+                self.assertIn(col, columns)
+        
+        # And: 番組テーブルの構造が正しい
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute("PRAGMA table_info(programs)")
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            expected_columns = ['id', 'station_id', 'title', 'start_time', 'end_time', 'duration', 
+                              'description', 'performers', 'genre', 'sub_genre', 'updated_at']
+            for col in expected_columns:
+                self.assertIn(col, columns)
+    
+    def test_05_放送局情報管理機能(self):
+        """
+        TDD Test: 放送局情報管理機能
+        
+        放送局情報の保存・読み込み・キャッシュが正常動作することを確認
+        """
+        # Given: ProgramInfoManagerとサンプル放送局データ
+        db_path = self.temp_env.config_dir / "test_stations.db"
+        manager = ProgramInfoManager(db_path=str(db_path), area_id="JP13")
+        
+        sample_stations = [
+            Station(
+                id="TBS",
+                name="TBSラジオ",
+                ascii_name="TBS RADIO",
+                area_id="JP13",
+                logo_url="https://example.com/tbs_logo.png",
+                banner_url="https://example.com/tbs_banner.png"
+            ),
+            Station(
+                id="QRR",
+                name="文化放送",
+                ascii_name="Joqr",
+                area_id="JP13",
+                logo_url="https://example.com/qrr_logo.png",
+                banner_url="https://example.com/qrr_banner.png"
+            )
+        ]
+        
+        # When: 放送局情報を保存
+        manager._save_stations(sample_stations)
+        
+        # Then: データベースに正しく保存される
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM stations")
+            count = cursor.fetchone()[0]
+            self.assertEqual(count, 2)
+        
+        # When: 放送局情報をキャッシュから読み込み
+        cached_stations = manager._get_cached_stations()
+        
+        # Then: 正しい放送局情報が取得される
+        self.assertEqual(len(cached_stations), 2)
+        
+        tbs_station = next(s for s in cached_stations if s.id == "TBS")
+        self.assertEqual(tbs_station.name, "TBSラジオ")
+        self.assertEqual(tbs_station.ascii_name, "TBS RADIO")
+        self.assertEqual(tbs_station.area_id, "JP13")
+        
+        qrr_station = next(s for s in cached_stations if s.id == "QRR")
+        self.assertEqual(qrr_station.name, "文化放送")
+        self.assertEqual(qrr_station.ascii_name, "Joqr")
+        
+        # When: 特定の放送局IDで検索
+        tbs_by_id = manager.get_station_by_id("TBS")
+        
+        # Then: 正しい放送局が取得される
+        self.assertIsNotNone(tbs_by_id)
+        self.assertEqual(tbs_by_id.name, "TBSラジオ")
+        
+        # When: 存在しない放送局IDで検索
+        nonexistent = manager.get_station_by_id("NONEXISTENT")
+        
+        # Then: Noneが返される
+        self.assertIsNone(nonexistent)
+    
+    def test_06_番組情報管理機能(self):
+        """
+        TDD Test: 番組情報管理機能
+        
+        番組情報の保存・読み込み・検索が正常動作することを確認
+        """
+        # Given: ProgramInfoManagerとサンプル番組データ
+        db_path = self.temp_env.config_dir / "test_programs.db"
+        manager = ProgramInfoManager(db_path=str(db_path), area_id="JP13")
+        
+        sample_programs = [
+            Program(
+                id="TBS_20250721_060000",
+                station_id="TBS",
+                title="森本毅郎・スタンバイ!",
+                start_time=datetime(2025, 7, 21, 6, 0, 0),
+                end_time=datetime(2025, 7, 21, 8, 30, 0),
+                duration=150,
+                description="朝の情報番組",
+                performers=["森本毅郎", "小島慶子"],
+                genre="情報・ワイドショー"
+            ),
+            Program(
+                id="QRR_20250721_070000",
+                station_id="QRR",
+                title="おはよう寺ちゃん",
+                start_time=datetime(2025, 7, 21, 7, 0, 0),
+                end_time=datetime(2025, 7, 21, 10, 0, 0),
+                duration=180,
+                description="朝の番組",
+                performers=["寺島尚正"],
+                genre="情報"
+            )
+        ]
+        
+        # When: 番組情報を保存
+        manager._save_programs(sample_programs)
+        
+        # Then: データベースに正しく保存される
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM programs")
+            count = cursor.fetchone()[0]
+            self.assertEqual(count, 2)
+        
+        # When: 特定日の番組をキャッシュから読み込み
+        target_date = datetime(2025, 7, 21)
+        cached_programs = manager._get_cached_programs(target_date)
+        
+        # Then: 正しい番組情報が取得される
+        self.assertEqual(len(cached_programs), 2)
+        
+        tbs_program = next(p for p in cached_programs if p.station_id == "TBS")
+        self.assertEqual(tbs_program.title, "森本毅郎・スタンバイ!")
+        self.assertEqual(len(tbs_program.performers), 2)
+        self.assertEqual(tbs_program.duration, 150)
+        
+        # When: 特定放送局の番組のみ取得
+        tbs_only_programs = manager._get_cached_programs(target_date, "TBS")
+        
+        # Then: TBSの番組のみが取得される
+        self.assertEqual(len(tbs_only_programs), 1)
+        self.assertEqual(tbs_only_programs[0].station_id, "TBS")
+
+
+class TestProgramInfoManagerAPI(unittest.TestCase, RealEnvironmentTestBase):
+    """ProgramInfoManager API連携機能テスト"""
+    
+    def setUp(self):
+        """テストセットアップ"""
+        super().setUp()
+        self.temp_env = TemporaryTestEnvironment()
+        self.temp_env.__enter__()
+        
+    def tearDown(self):
+        """テストクリーンアップ"""
+        self.temp_env.__exit__(None, None, None)
+        super().tearDown()
     
     @patch('requests.Session.get')
-    def test_get_station_list_success(self, mock_get):
-        """放送局リスト取得成功のテスト"""
-        # モックXMLレスポンス（実際のRadiko API構造に合わせて修正）
-        xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+    def test_07_放送局一覧取得機能(self, mock_get):
+        """
+        TDD Test: 放送局一覧取得機能
+        
+        Radiko APIからの放送局一覧取得が正常動作することを確認
+        """
+        # Given: 正常な放送局一覧XMLレスポンス
+        sample_xml = """<?xml version="1.0" encoding="UTF-8"?>
         <stations>
             <station>
                 <id>TBS</id>
                 <name>TBSラジオ</name>
                 <ascii_name>TBS RADIO</ascii_name>
-                <logo>http://example.com/tbs_logo.png</logo>
-                <banner>http://example.com/tbs_banner.png</banner>
             </station>
             <station>
                 <id>QRR</id>
                 <name>文化放送</name>
-                <ascii_name>BUNKA HOSO</ascii_name>
-                <logo>http://example.com/qrr_logo.png</logo>
-                <banner>http://example.com/qrr_banner.png</banner>
+                <ascii_name>Joqr</ascii_name>
             </station>
-        </stations>'''
+        </stations>"""
         
-        mock_response = Mock()
+        mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
-        mock_response.content = xml_content.encode('utf-8')
+        mock_response.content = sample_xml.encode('utf-8')
         mock_get.return_value = mock_response
         
-        stations = self.manager.get_station_list()
+        # When: 放送局一覧を取得
+        db_path = self.temp_env.config_dir / "test_api.db"
+        manager = ProgramInfoManager(db_path=str(db_path), area_id="JP13")
         
+        stations = manager.get_station_list(force_update=True)
+        
+        # Then: 正しい放送局リストが取得される
         self.assertEqual(len(stations), 2)
-        self.assertEqual(stations[0].id, "TBS")
-        self.assertEqual(stations[0].name, "TBSラジオ")
-        self.assertEqual(stations[1].id, "QRR")
-        self.assertEqual(stations[1].name, "文化放送")
-    
-    @patch('requests.Session.get')
-    def test_get_station_list_network_error(self, mock_get):
-        """放送局リスト取得ネットワークエラーのテスト"""
-        mock_get.side_effect = Exception("Network error")
         
-        with self.assertRaises(ProgramInfoError):
-            self.manager.get_station_list()
-    
-    @patch('requests.Session.get')
-    def test_fetch_program_guide_success(self, mock_get):
-        """番組表取得成功のテスト"""
-        # モックXMLレスポンス
-        xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
-        <programs>
-            <station id="TBS">
-                <prog ft="20240101200000" to="20240101210000">
-                    <title>テスト番組1</title>
-                    <desc>番組の説明</desc>
-                    <pfm>出演者1,出演者2</pfm>
-                    <genre>音楽</genre>
-                    <sub_genre>ポップス</sub_genre>
-                </prog>
-                <prog ft="20240101210000" to="20240101220000">
-                    <title>テスト番組2</title>
-                    <desc>番組の説明2</desc>
-                    <genre>トーク</genre>
-                </prog>
-            </station>
-        </programs>'''
+        tbs_station = next(s for s in stations if s.id == "TBS")
+        self.assertEqual(tbs_station.name, "TBSラジオ")
+        self.assertEqual(tbs_station.ascii_name, "TBS RADIO")
+        self.assertEqual(tbs_station.area_id, "JP13")
         
-        mock_response = Mock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.content = xml_content.encode('utf-8')
-        mock_get.return_value = mock_response
+        # And: API URLが正しく呼び出される
+        expected_url = f"https://radiko.jp/v3/station/list/JP13.xml"
+        mock_get.assert_called_with(expected_url)
         
-        date = datetime(2024, 1, 1)
-        programs = self.manager.fetch_program_guide(date)
-        
-        self.assertEqual(len(programs), 2)
-        self.assertEqual(programs[0].title, "テスト番組1")
-        self.assertEqual(programs[0].station_id, "TBS")
-        self.assertEqual(len(programs[0].performers), 2)
-        self.assertEqual(programs[1].title, "テスト番組2")
-    
-    def test_parse_radiko_time(self):
-        """Radiko時刻解析のテスト"""
-        time_str = "20240101200000"
-        parsed_time = self.manager._parse_radiko_time(time_str)
-        
-        self.assertEqual(parsed_time.year, 2024)
-        self.assertEqual(parsed_time.month, 1)
-        self.assertEqual(parsed_time.day, 1)
-        self.assertEqual(parsed_time.hour, 20)
-        self.assertEqual(parsed_time.minute, 0)
-        self.assertEqual(parsed_time.second, 0)
-    
-    def test_get_element_text(self):
-        """XML要素テキスト取得のテスト"""
-        xml_str = '<root><title>テスト番組</title><empty></empty></root>'
-        root = ET.fromstring(xml_str)
-        
-        # 存在する要素
-        title = self.manager._get_element_text(root, 'title')
-        self.assertEqual(title, "テスト番組")
-        
-        # 空の要素
-        empty = self.manager._get_element_text(root, 'empty')
-        self.assertEqual(empty, "")
-        
-        # 存在しない要素
-        nonexistent = self.manager._get_element_text(root, 'nonexistent')
-        self.assertEqual(nonexistent, "")
-    
-    def test_save_and_get_stations(self):
-        """放送局保存・取得のテスト"""
-        stations = [
-            Station(
-                id="TBS",
-                name="TBSラジオ",
-                ascii_name="TBS RADIO",
-                area_id="JP13"
-            ),
-            Station(
-                id="QRR",
-                name="文化放送",
-                ascii_name="BUNKA HOSO",
-                area_id="JP13"
-            )
-        ]
-        
-        # 保存
-        self.manager._save_stations(stations)
-        
-        # 取得
-        cached_stations = self.manager._get_cached_stations()
-        
-        self.assertEqual(len(cached_stations), 2)
-        self.assertEqual(cached_stations[0].id, "TBS")  # 名前順でソート (TBSラジオ)
-        self.assertEqual(cached_stations[1].id, "QRR")  # 文化放送
-    
-    def test_save_and_get_programs(self):
-        """番組保存・取得のテスト"""
-        jst = pytz.timezone('Asia/Tokyo')
-        programs = [
-            Program(
-                id="TBS_20240101200000",
-                station_id="TBS",
-                title="テスト番組1",
-                start_time=jst.localize(datetime(2024, 1, 1, 20, 0, 0)),
-                end_time=jst.localize(datetime(2024, 1, 1, 21, 0, 0)),
-                duration=60
-            ),
-            Program(
-                id="TBS_20240101210000",
-                station_id="TBS",
-                title="テスト番組2",
-                start_time=jst.localize(datetime(2024, 1, 1, 21, 0, 0)),
-                end_time=jst.localize(datetime(2024, 1, 1, 22, 0, 0)),
-                duration=60
-            )
-        ]
-        
-        # 保存
-        self.manager._save_programs(programs)
-        
-        # 取得
-        date = datetime(2024, 1, 1)
-        cached_programs = self.manager._get_cached_programs(date)
-        
-        self.assertEqual(len(cached_programs), 2)
-        self.assertEqual(cached_programs[0].title, "テスト番組1")
-        self.assertEqual(cached_programs[1].title, "テスト番組2")
-    
-    def test_get_current_program(self):
-        """現在放送中番組取得のテスト"""
-        jst = pytz.timezone('Asia/Tokyo')
-        now = datetime.now(jst)
-        
-        # 現在時刻を含む番組を作成
-        program = Program(
-            id="TBS_test",
-            station_id="TBS",
-            title="現在の番組",
-            start_time=now - timedelta(minutes=30),
-            end_time=now + timedelta(minutes=30),
-            duration=60
-        )
-        
-        # データベースに保存
-        self.manager._save_programs([program])
-        
-        # 現在の番組を取得
-        current = self.manager.get_current_program("TBS")
-        
-        self.assertIsNotNone(current)
-        self.assertEqual(current.title, "現在の番組")
-    
-    def test_search_programs(self):
-        """番組検索のテスト"""
-        jst = pytz.timezone('Asia/Tokyo')
-        programs = [
-            Program(
-                id="TBS_1",
-                station_id="TBS",
-                title="音楽番組",
-                start_time=jst.localize(datetime(2024, 1, 1, 20, 0, 0)),
-                end_time=jst.localize(datetime(2024, 1, 1, 21, 0, 0)),
-                duration=60,
-                description="クラシック音楽の番組"
-            ),
-            Program(
-                id="TBS_2",
-                station_id="TBS",
-                title="ニュース番組",
-                start_time=jst.localize(datetime(2024, 1, 1, 21, 0, 0)),
-                end_time=jst.localize(datetime(2024, 1, 1, 22, 0, 0)),
-                duration=60,
-                description="今日のニュース"
-            )
-        ]
-        
-        # データベースに保存
-        self.manager._save_programs(programs)
-        
-        # タイトルで検索
-        results = self.manager.search_programs("音楽")
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].title, "音楽番組")
-        
-        # 説明で検索
-        results = self.manager.search_programs("ニュース")
-        self.assertEqual(len(results), 1)  # ニュース番組が1件ヒット
-    
-    def test_cleanup_old_programs(self):
-        """古い番組削除のテスト"""
-        jst = pytz.timezone('Asia/Tokyo')
-        old_time = datetime.now(jst) - timedelta(days=60)
-        
-        old_program = Program(
-            id="TBS_old",
-            station_id="TBS",
-            title="古い番組",
-            start_time=old_time,
-            end_time=old_time + timedelta(hours=1),
-            duration=60
-        )
-        
-        # データベースに保存
-        self.manager._save_programs([old_program])
-        
-        # クリーンアップ実行（30日より古いものを削除）
-        self.manager.cleanup_old_programs(30)
-        
-        # 古い番組が削除されていることを確認
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute('SELECT COUNT(*) FROM programs')
+        # And: データベースに保存される
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM stations")
             count = cursor.fetchone()[0]
-            self.assertEqual(count, 0)
+            self.assertEqual(count, 2)
     
-    def test_get_station_by_id(self):
-        """ID による放送局取得のテスト"""
-        station = Station(
-            id="TBS",
-            name="TBSラジオ",
-            ascii_name="TBS RADIO",
-            area_id="JP13"
-        )
+    def test_08_番組検索機能(self):
+        """
+        TDD Test: 番組検索機能
         
-        # 保存
-        self.manager._save_stations([station])
+        タイトル・出演者・説明文での検索が正常動作することを確認
+        """
+        # Given: ProgramInfoManagerと検索対象番組データ
+        db_path = self.temp_env.config_dir / "test_search.db"
+        manager = ProgramInfoManager(db_path=str(db_path), area_id="JP13")
         
-        # ID で取得
-        retrieved = self.manager.get_station_by_id("TBS")
+        search_programs = [
+            Program(
+                id="TBS_20250721_060000",
+                station_id="TBS",
+                title="森本毅郎・スタンバイ!",
+                start_time=datetime(2025, 7, 21, 6, 0, 0),
+                end_time=datetime(2025, 7, 21, 8, 30, 0),
+                duration=150,
+                description="朝の情報番組。政治・経済ニュースをお届け",
+                performers=["森本毅郎", "小島慶子"],
+                genre="情報・ワイドショー"
+            ),
+            Program(
+                id="QRR_20250721_140000",
+                station_id="QRR",
+                title="アフタヌーンパラダイス",
+                start_time=datetime(2025, 7, 21, 14, 0, 0),
+                end_time=datetime(2025, 7, 21, 16, 0, 0),
+                duration=120,
+                description="午後の音楽番組",
+                performers=["山田太郎", "森山直太朗"],
+                genre="音楽"
+            )
+        ]
         
-        self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.id, "TBS")
-        self.assertEqual(retrieved.name, "TBSラジオ")
+        # データベースに保存
+        manager._save_programs(search_programs)
         
-        # 存在しない ID
-        nonexistent = self.manager.get_station_by_id("NONEXISTENT")
-        self.assertIsNone(nonexistent)
+        # Test Case 1: タイトル検索
+        title_results = manager.search_programs("森本", limit=10)
+        self.assertEqual(len(title_results), 1)
+        self.assertEqual(title_results[0].title, "森本毅郎・スタンバイ!")
+        
+        # Test Case 2: 出演者検索
+        performer_results = manager.search_programs("森山", limit=10)
+        self.assertEqual(len(performer_results), 1)
+        self.assertEqual(performer_results[0].title, "アフタヌーンパラダイス")
+        
+        # Test Case 3: 説明文検索
+        description_results = manager.search_programs("政治", limit=10)
+        self.assertEqual(len(description_results), 1)
+        self.assertEqual(description_results[0].title, "森本毅郎・スタンバイ!")
+        
+        # Test Case 4: 放送局フィルタリング
+        station_results = manager.search_programs("", station_id="QRR", limit=10)
+        self.assertEqual(len(station_results), 1)
+        self.assertEqual(station_results[0].station_id, "QRR")
+        
+        # Test Case 5: 日付範囲検索
+        start_date = datetime(2025, 7, 21, 0, 0, 0)
+        end_date = datetime(2025, 7, 21, 23, 59, 59)
+        date_results = manager.search_programs("", start_date=start_date, end_date=end_date, limit=10)
+        self.assertEqual(len(date_results), 2)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

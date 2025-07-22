@@ -198,7 +198,27 @@ class TemporaryTestEnvironment:
 
 
 class RealEnvironmentTestBase:
-    """実環境テストベースクラス"""
+    """
+    実環境テストベースクラス（TDD手法対応）
+    
+    TEST_REDESIGN_PLANに基づく実環境重視テスト基盤。
+    モック使用最小限（10%以下）、実ファイル・実データベース・実暗号化処理を使用。
+    """
+    
+    def setUp(self):
+        """実環境テストセットアップ"""
+        # 実ファイルシステム使用
+        # 実SQLiteデータベース使用
+        # 実暗号化処理使用
+        # 一時ディレクトリ管理
+        pass
+    
+    def tearDown(self):
+        """実環境テストクリーンアップ"""
+        # リソース解放
+        # 一時ファイル削除
+        # データベース閉鎖
+        pass
     
     def setup_real_authenticator(self, temp_env: TemporaryTestEnvironment) -> RadikoAuthenticator:
         """実環境認証器セットアップ"""

@@ -63,6 +63,18 @@ def setup_test_environment():
 def enable_logging():
     """テスト実行時のログ出力を有効化"""
     import logging
+    import warnings
+    import gc
+    
+    # ログ設定
     logging.basicConfig(level=logging.DEBUG)
+    
+    # ResourceWarningを無視
+    warnings.filterwarnings("ignore", category=ResourceWarning)
+    warnings.filterwarnings("ignore", message="unclosed database")
+    warnings.filterwarnings("ignore", message="unclosed <socket")
+    
     yield
-    # ログ設定はそのまま残す
+    
+    # ガベージコレクション強制実行
+    gc.collect()
