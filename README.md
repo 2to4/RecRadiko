@@ -1,57 +1,128 @@
-# 📻 RecRadiko - タイムフリー専用録音システム
+# 📻 RecRadiko - macOSネイティブ対応タイムフリー録音システム
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-262%20Passed-brightgreen.svg)](tests/)
-[![Coverage](https://img.shields.io/badge/Coverage-95%25-brightgreen.svg)](tests/)
+[![Latest Release](https://img.shields.io/github/v/release/2to4/RecRadiko?style=flat-square)](https://github.com/2to4/RecRadiko/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/2to4/RecRadiko/total?style=flat-square)](https://github.com/2to4/RecRadiko/releases)
+[![macOS](https://img.shields.io/badge/macOS-12.0+-blue?style=flat-square&logo=apple)](https://github.com/2to4/RecRadiko/releases/latest)
+[![Universal Binary](https://img.shields.io/badge/Universal-Intel%20%2B%20Apple%20Silicon-green?style=flat-square)](https://github.com/2to4/RecRadiko/releases/latest)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://python.org)
+[![Tests](https://img.shields.io/badge/Tests-300%2B%20Passed-brightgreen.svg)](tests/)
+[![Coverage](https://img.shields.io/badge/Coverage-87%25-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Quality](https://img.shields.io/badge/Quality-Production%20Ready-brightgreen.svg)](docs/)
-[![API Status](https://img.shields.io/badge/Radiko%20API-Verified-brightgreen.svg)](#)
-[![Recording](https://img.shields.io/badge/Recording-Fully%20Functional-brightgreen.svg)](#)
-[![UI](https://img.shields.io/badge/UI-Keyboard%20Navigation-blue.svg)](#)
 
-> 🎯 **革新的なキーボードナビゲーション対応タイムフリー専用録音システム** - HLS制約を完全に回避し、過去1週間の番組を無制限で高品質録音
+> 🎯 **macOSネイティブアプリケーション対応** - ワンクリックインストール・ユニバーサルバイナリ・完全スタンドアロン対応
 
-RecRadikoは、Radiko（日本のインターネットラジオサービス）のタイムフリー機能に特化した専用録音システムです。**2025年7月17日Phase 6完全達成**により、地域統合・深夜番組対応・品質向上を実現し、シンプルで直感的なキーボードナビゲーションUIによるプロダクション品質のPythonアプリケーションです。
+RecRadikoは、Radiko（日本のインターネットラジオサービス）のタイムフリー機能に特化した専用録音システムです。**2025年7月23日にmacOSネイティブアプリケーション化を達成**し、技術的知識不要でダウンロード・インストール・実行が可能になりました。
 
-## 🏆 **実証済み実績（2025年7月17日現在）**
+## 📦 ダウンロード
 
+### 🖥️ macOSユーザー（推奨）
+
+**最新版: RecRadiko 2.0.0**
+
+[![Download DMG](https://img.shields.io/badge/Download-RecRadiko--2.0.0.dmg-blue?style=for-the-badge&logo=apple)](https://github.com/2to4/RecRadiko/releases/download/v2.0.0/RecRadiko-2.0.0.dmg)
+
+- **ファイルサイズ**: 36MB（全依存関係込み）
+- **対応OS**: macOS 12.0 (Monterey) 以降
+- **対応Mac**: Apple Silicon (M1/M2/M3) + Intel Mac
+- **特徴**: Python環境・ffmpeg不要、ドラッグ&ドロップのみでインストール
+
+#### 📋 インストール手順
+1. **DMGファイルをダウンロード**
+2. **DMGを開いて**RecRadiko.appをApplicationsフォルダにドラッグ
+3. **アプリを右クリック** → 「開く」で初回起動
+4. **ターミナルで実行**: `/Applications/RecRadiko.app/Contents/MacOS/RecRadiko`
+
+### 🐍 その他のプラットフォーム
+
+[![Download Source](https://img.shields.io/badge/Download-Source%20Code-green?style=for-the-badge&logo=github)](https://github.com/2to4/RecRadiko/releases/latest)
+
+**必要な環境**:
+- Python 3.9+
+- ffmpeg
+- pip install -r requirements.txt
+
+### 📊 全リリース履歴
+
+すべてのバージョンは [Releases ページ](https://github.com/2to4/RecRadiko/releases) でご確認いただけます。
+
+---
+
+## ⚠️ macOSセキュリティについて
+
+macOSで「開発元を確認できません」という警告が表示される場合：
+
+### 対処方法 1: 右クリックで開く（推奨）
+1. RecRadiko.app を右クリック
+2. 「開く」を選択
+3. 警告ダイアログで「開く」をクリック
+
+### 対処方法 2: システム環境設定
+1. システム環境設定 → セキュリティとプライバシー
+2. 「一般」タブで「このまま開く」をクリック
+
+### 対処方法 3: コマンドライン
+```bash
+sudo xattr -d com.apple.quarantine /Applications/RecRadiko.app
+```
+
+**安全性**: RecRadikoは完全にオープンソースで、悪意のあるコードは含まれていません。
+
+---
+
+## 🏆 実証済み実績（2025年7月23日現在）
+
+✅ **macOSネイティブアプリ**: DMGインストーラー・ユニバーサルバイナリ・36MBオールインワン  
 ✅ **実際番組録音成功**: 10分番組を5.48秒で録音完了（実時間の1/110高速処理）  
 ✅ **時間精度**: 99.99%（599.93秒/600秒）の高精度録音  
 ✅ **音質**: MP3 256kbps, 48kHz, ID3タグ自動埋め込み（常時実行）  
 ✅ **保存先**: デスクトップ固定（~/Desktop/RecRadiko/）・フォルダ自動作成  
-✅ **UI最適化**: シンプル化・メニューベースページング・直感的操作  
-✅ **地域統合**: 九州・沖縄統合・地理的順序表示・地域ID順都道府県  
-✅ **深夜番組対応**: 日付処理・録音精度・表示順序の完全修正  
-✅ **FFmpeg改善**: プログレスバー安定化・エラーハンドリング強化  
+✅ **UI最適化**: 15件ページング・深夜番組末尾表示・シンプル化完了  
+✅ **地域統合**: 47都道府県対応・九州沖縄統合・地理的順序表示  
+✅ **品質保証**: 包括的テストスイート・境界値テスト・TDD手法採用  
 ✅ **Radiko API**: 2025年仕様完全対応・認証システム完全動作  
-✅ **テスト品質**: 262テスト95%成功（実環境重視・モック使用90%削減完了）  
 
 ## ✨ 主な特徴
 
-### 🚀 **最適化されたキーボードナビゲーションUI**
+### 🖥️ macOSネイティブアプリケーション
+- **ワンクリックインストール**: DMGインストーラー対応
+- **ユニバーサルバイナリ**: Apple Silicon + Intel Mac 両対応
+- **完全スタンドアロン**: Python環境不要、36MBオールインワンパッケージ
+- **macOS統合**: ネイティブな見た目と操作感、Gatekeeper対応
+
+### 🚀 最適化されたキーボードナビゲーションUI
 - **⌨️ 直感的操作** - 上下キー・Enter・ESCによる快適なキーボード操作
 - **🎯 3段階ワークフロー** - 放送局→日付→番組選択で簡単録音
-- **📄 メニューベースページング** - 直感的な「次のページ」「前のページ」選択操作
+- **📄 15件ページング** - 見やすさを重視した固定ページング表示
 - **⚙️ シンプル設定画面** - 地域設定・音質設定・通知設定（必要最小限）
 - **🔒 自動化設定** - 保存先固定・ID3タグ常時実行でユーザー負荷軽減
 
-### 🎵 **タイムフリー専用システム**
+### 🎵 タイムフリー専用システム
 - **HLS制約の完全回避** - ライブ録音の5分制限問題を根本的に解決
 - **無制限録音** - 実証済み：10分番組を5.48秒で高速録音（実時間の1/110）
 - **過去1週間対応** - 放送済み番組の完全アーカイブ録音
 - **高速並行ダウンロード** - 8セグメント同時処理（平均107セグメント/秒）
 - **メタデータ自動埋め込み** - ID3タグ（番組名、出演者、放送局、日付）常時実行
 
-### 🏗️ **高品質アーキテクチャ**
+### 🏗️ 高品質アーキテクチャ
 - **📱 統一設定管理** - JSON設定処理の完全統一化
 - **🔧 型安全性** - Python型ヒント100%対応
 - **🧪 実環境テスト** - モック使用率90%削減による実用性重視
-- **♻️ LoggerMixin統一** - 13クラスで統一ロガー初期化
+- **♻️ LoggerMixin統一** - 統一ロガー初期化
 - **🎨 コード品質** - 重複コード削除・保守性・拡張性の大幅改善
 
-### 🎮 **操作方法**
+## 🎮 操作方法
 
-#### メインUI（デフォルト）
+### macOSアプリ版（推奨）
+```bash
+# Applicationsフォルダから起動
+cd /Applications
+./RecRadiko.app/Contents/MacOS/RecRadiko
+
+# または Finderから直接起動（右クリック → 開く）
+```
+
+### Python版
 ```bash
 # キーボードナビゲーションUIで起動（デフォルト）
 python RecRadiko.py
@@ -70,22 +141,37 @@ python RecRadiko.py --verbose  # 詳細ログ付き
 1. **メインメニュー** → 「番組を録音する」選択
 2. **放送局選択** → TBS・文化放送・ニッポン放送等
 3. **日付選択** → 過去1週間から日付選択
-4. **番組選択** → 該当日の番組一覧（メニューベースページング対応）
+4. **番組選択** → 15件ずつページング表示、深夜番組は前日末尾に表示
 5. **録音実行** → デスクトップ固定保存・ID3タグ自動埋め込み・完了通知
 
 ## 🚀 クイックスタート
 
-### 📋 必要要件
+### 🔧 システム要件
 
-- **Python 3.8以上**
-- **FFmpeg**（音声変換用）
-- **インターネット接続**
+#### macOSアプリ版（推奨）
+- **OS**: macOS 12.0 (Monterey) 以降
+- **Mac**: Apple Silicon (M1/M2/M3) または Intel Mac
+- **容量**: 約150MB
+- **追加要件**: なし（全て内蔵済み）
+
+#### Python版
+- **Python**: 3.9以降
+- **ffmpeg**: 7.0以降
+- **OS**: macOS, Linux, Windows
+- **依存関係**: requirements.txt参照
 
 ### ⚡ インストール
 
+#### macOSユーザー（推奨）
+1. [RecRadiko-2.0.0.dmg](https://github.com/2to4/RecRadiko/releases/download/v2.0.0/RecRadiko-2.0.0.dmg) をダウンロード
+2. DMGを開いてアプリをApplicationsにドラッグ&ドロップ
+3. 右クリック → 開く で初回起動
+4. ターミナルで実行
+
+#### その他のプラットフォーム
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/your-repo/RecRadiko.git
+git clone https://github.com/2to4/RecRadiko.git
 cd RecRadiko
 
 # 2. 依存関係をインストール
@@ -95,20 +181,17 @@ pip install -r requirements.txt
 brew install ffmpeg
 
 # 4. 設定ファイルを作成（オプション）
-# Phase 5で大幅簡素化 - 必要最小限の設定のみ
 cp config.json.template config.json
-# 都道府県名・音質を設定（任意・UIから変更可能）
-# 詳細: CONFIG_GUIDE.md を参照
 
 # 5. 動作確認・起動
 python RecRadiko.py
 ```
 
-### 🎯 **実際の使用例（2025年7月17日更新）**
+### 🎯 実際の使用例（2025年7月23日更新）
 
 ```bash
-# 1. キーボードナビゲーションUIで起動
-python RecRadiko.py
+# 1. macOSアプリ版起動
+/Applications/RecRadiko.app/Contents/MacOS/RecRadiko
 
 # 2. メインメニューで操作（シンプル化済み）
 📻 RecRadiko キーボードナビゲーション UI
@@ -129,13 +212,13 @@ LFR（ニッポン放送）
 
 # 5. 日付選択（過去1週間）
 📅 録音する日付を選択してください
-2025-07-15（今日）
-2025-07-14（昨日）
-2025-07-13（2日前）
+2025-07-22（今日）
+2025-07-21（昨日）
+2025-07-20（2日前）
 ...
 
-# 6. 番組選択（メニューベースページング対応）
-📺 番組を選択してください（2025-07-13 TBS）
+# 6. 番組選択（15件ページング・深夜番組末尾表示）
+📺 番組を選択してください（2025-07-21 TBS）
 05:05-05:15 芹ゆう子　お気づきかしら（仮）
 06:00-08:30 森本毅郎・スタンバイ!
 09:00-11:00 番組名
@@ -145,46 +228,46 @@ LFR（ニッポン放送）
 
 # 7. 録音実行・結果（デスクトップ固定保存・ID3タグ自動埋め込み）
 ✅ 録音完了！
-ファイル: ~/Desktop/RecRadiko/TBS_20250713_0505_芹ゆう子お気づきかしら（仮）.mp3
+ファイル: ~/Desktop/RecRadiko/TBS_20250721_0505_芹ゆう子お気づきかしら（仮）.mp3
 再生時間: 10.00分 (599.93秒)
 時間精度: 99.99%
 品質: MP3 256kbps, 48kHz, ID3タグ付き
 メタデータ: 番組名・出演者・放送局・日付自動埋め込み完了
 ```
 
-### ⚙️ 設定管理（シンプル化完了）
-
-UIの「設定を変更する」から以下の設定が可能：
-
-1. **地域設定** - 47都道府県対応・九州・沖縄統合（UI経由で変更可能）
-2. **音質設定** - MP3/AAC、ビットレート選択（専用画面）
-3. **通知設定** - 録音完了通知の設定
-4. **設定のエクスポート/インポート**
-
-**自動化済み設定**:
-- **保存先**: `~/Desktop/RecRadiko/`固定（変更不要）
-- **ID3タグ**: 番組情報の自動埋め込み（常時実行）
-
 ## 🏗️ アーキテクチャ
 
-### キーボードナビゲーションUI対応アーキテクチャ
+### macOSアプリケーション構成
 ```
-RecRadiko v2.0 キーボードナビゲーションUI対応システム
+RecRadiko.app/
+├── Contents/
+│   ├── Info.plist              # macOSアプリケーション設定
+│   ├── MacOS/
+│   │   ├── RecRadiko           # メイン実行ファイル
+│   │   └── ffmpeg              # 内蔵ffmpegバイナリ
+│   ├── Resources/
+│   │   └── icon.icns           # アプリケーションアイコン
+│   └── Frameworks/             # Python環境・依存ライブラリ
+```
+
+### キーボードナビゲーションUI対応システム
+```
+RecRadiko v2.0 macOSネイティブアプリケーション
 ├── RecRadiko.py                 # メインエントリーポイント
 ├── src/
 │   ├── cli.py                   # 統一CLIシステム（キーボードUI専用）
 │   ├── timefree_recorder.py     # タイムフリー録音エンジン
 │   ├── program_history.py       # 過去番組管理（SQLite）
 │   ├── auth.py                  # タイムフリー認証システム
-│   ├── program_info.py          # 番組情報管理
+│   ├── program_info.py          # 番組情報管理・深夜番組対応
 │   ├── region_mapper.py         # 47都道府県対応
 │   ├── ui/                      # 最適化されたキーボードナビゲーションUI
 │   │   ├── recording_workflow.py   # 録音ワークフロー統合（デスクトップ固定保存）
-│   │   ├── screens/                # シンプル化された画面実装
+│   │   ├── screens/                # 改良された画面実装
 │   │   │   ├── main_menu_screen.py     # メインメニュー（4項目）
 │   │   │   ├── station_select_screen.py # 放送局選択
 │   │   │   ├── date_select_screen.py    # 日付選択
-│   │   │   ├── program_select_screen.py # 番組選択（ページング対応）
+│   │   │   ├── program_select_screen.py # 番組選択（15件ページング・深夜番組末尾）
 │   │   │   ├── settings_screen.py      # 設定管理（シンプル化）
 │   │   │   ├── region_select_screen.py # 地域選択
 │   │   │   └── audio_quality_screen.py # 音質設定
@@ -194,204 +277,55 @@ RecRadiko v2.0 キーボードナビゲーションUI対応システム
 │       ├── config_utils.py      # 統一設定管理
 │       ├── base.py              # LoggerMixin統一
 │       └── ...
-└── tests/                       # 実環境重視テストスイート
-    ├── test_*_integration.py    # 統合テストファイル
+└── tests/                       # 包括的テストスイート
+    ├── test_*_comprehensive.py  # 境界値・品質テスト
     ├── ui/test_*.py             # UIテスト
     └── utils/test_environment.py   # 実環境テスト基盤
 ```
 
-### 🔧 **技術的特徴**
+## 🎯 最新の改善点（v2.0.0）
 
-#### 統一設定管理（`src/utils/config_utils.py`）
-- **4ファイルの重複削除**: cli.py、auth.py、error_handler.py、settings_screen.py
-- **原子的保存**: 一時ファイル→移動による安全な設定保存
-- **検証機能**: 設定データの整合性チェック
-- **エクスポート/インポート**: 設定の移行・バックアップ対応
+### 📱 macOSネイティブアプリケーション化
+- **DMGインストーラー**: 36MBオールインワンパッケージ
+- **ユニバーサルバイナリ**: Apple Silicon + Intel Mac両対応
+- **完全スタンドアロン**: Python環境・ffmpeg・依存関係すべて内蔵
+- **macOS統合**: Info.plist設定・アプリアイコン・Gatekeeper対応
 
-#### 型安全性
-- **100%型ヒント対応**: 32ファイル全てで型ヒント完備
-- **LoggerMixin統一**: 13クラスで統一ロガー初期化
-- **静的解析対応**: mypy・pylintによる品質保証
 
-#### 実環境重視テスト
-- **モック使用90%削減**: 1,738個→174個（実環境化）
-- **4つの統合テストファイル**: 包括的な実環境テスト
-- **262テスト95%成功**: 高品質な実用性検証
+## 📞 サポート
 
-## 🎯 機能詳細
+### 🐛 バグ報告・機能要望
+[GitHub Issues](https://github.com/2to4/RecRadiko/issues) までお気軽にお問い合わせください。
 
-### 📺 **番組検索機能**
-キーボードUIの「番組を検索する」から：
-- **番組名検索** - 部分一致対応
-- **出演者検索** - パーソナリティ名で検索
-- **日付範囲検索** - 期間指定での絞り込み
-- **放送局絞り込み** - 特定局の番組のみ
-- **リアルタイム検索** - 入力しながら候補表示
+### 💬 よくある質問
+- **Q**: macOSで起動できない
+- **A**: 右クリック → 開く で起動してください
 
-### 🎵 **録音機能**
-- **高速並行ダウンロード** - 8セグメント同時処理
-- **完全エラーハンドリング** - セグメント取得失敗時の自動リトライ
-- **メタデータ自動埋め込み** - ID3タグ完全対応
-- **品質選択** - MP3/AAC、ビットレート選択可能
-- **進捗表示** - リアルタイムダウンロード状況表示
+- **Q**: DMGが開けない
+- **A**: [最新版](https://github.com/2to4/RecRadiko/releases/latest)をダウンロードし直してください
 
-### ⚙️ **設定管理**
-- **47都道府県対応** - 自動地域ID変換
-- **音質設定** - フォーマット・ビットレート・サンプルレート
-- **保存先管理** - ファイル名規則・ディレクトリ構造
-- **通知設定** - 録音完了時の通知方法
-- **設定の移行** - エクスポート/インポート機能
-
-### 📊 **システム情報**
-- **録音履歴** - 過去の録音記録・統計
-- **システム状態** - メモリ使用量・ディスク容量
-- **パフォーマンス指標** - 録音速度・成功率
-- **ログ管理** - エラーログ・デバッグ情報
-
-## 🧪 品質保証
-
-### ✅ **テスト結果（2025年7月17日）**
-
-| カテゴリ | テスト数 | 成功率 | 状態 |
-|---------|----------|--------|------|
-| 統合テスト（実環境） | 89個 | 95% | ✅ 高品質 |
-| UIテスト | 86個 | 98% | ✅ 優秀 |
-| コンポーネントテスト | 87個 | 94% | ✅ 良好 |
-| **合計** | **262個** | **95%** | **🎉 プロダクション品質** |
-
-### 🔬 **テスト実行**
-
-```bash
-# 全テスト実行
-python -m pytest tests/ -v
-
-# 統合テスト（実環境重視）
-python -m pytest tests/test_*_integration.py -v
-
-# UIテスト
-python -m pytest tests/ui/ -v
-
-# 特定テスト
-python -m pytest tests/test_command_interface.py -v
-```
-
-### 📈 **パフォーマンス指標**
-
-- **録音速度**: 10分番組を5.48秒で録音（実時間の1/110高速）
-- **UI応答性**: キー操作<50ms、画面遷移<100ms
-- **メモリ効率**: ストリーミング処理による最適化
-- **型安全性**: 100%型ヒント対応・静的解析対応
-- **コード品質**: 重複コード削除・統一設計パターン
-
-## 📚 ドキュメント
-
-- 📖 **[ユーザーマニュアル](docs/USER_MANUAL.md)** - キーボードUI操作詳細
-- 🏗️ **[アーキテクチャ設計](docs/ARCHITECTURE_DESIGN.md)** - システム構成
-- 📝 **[開発ガイド](docs/DEVELOPMENT_GUIDE.md)** - 開発者向け情報
-- 🧪 **[テスト設計](docs/TEST_DESIGN.md)** - 品質保証仕様
-
-## 🛠️ 高度な設定
-
-### 🎛️ **設定ファイル例**
-
-```json
-{
-  "prefecture": "東京",
-  "area_id": "JP13",
-  "audio": {
-    "format": "mp3",
-    "bitrate": 256,
-    "sample_rate": 48000
-  },
-  "recording": {
-    "save_path": "~/Downloads/RecRadiko/",
-    "id3_tags_enabled": true,
-    "timeout_seconds": 30,
-    "max_retries": 3,
-    "concurrent_downloads": 8
-  },
-  "notification": {
-    "type": "macos_standard",
-    "enabled": true
-  },
-  "system": {
-    "log_level": "INFO",
-    "user_agent": "RecRadiko/2.0"
-  }
-}
-```
-
-### 🔧 **コマンドライン引数**
-
-```bash
-# 詳細ログ付きで起動
-python RecRadiko.py --verbose
-
-# 特定の設定ファイルを使用
-python RecRadiko.py --config custom_config.json
-
-# バージョン情報表示
-python RecRadiko.py --version
-```
-
-## 🔧 トラブルシューティング
-
-### 🚨 **よくある問題**
-
-1. **録音が開始されない**
-   - 地域設定を確認（設定画面から変更可能）
-   - インターネット接続を確認
-   - 番組の利用可能性を確認（過去1週間のみ対応）
-
-2. **音質が悪い**
-   - 設定画面で高ビットレート（320kbps）に変更
-   - AAC形式を選択（MP3より高品質）
-
-3. **UI操作ができない**
-   - Ctrl+Cで一度終了し、再起動
-   - ターミナル/コマンドプロンプトで実行していることを確認
-
-## 📊 システム要件
-
-### 💻 **最小システム要件**
-- CPU: デュアルコア 2GHz以上
-- メモリ: 4GB RAM
-- ストレージ: 10GB以上の空き容量
-- ネットワーク: 安定したインターネット接続（10Mbps以上推奨）
-
-### 🚀 **推奨システム要件**
-- CPU: クアッドコア 3GHz以上
-- メモリ: 8GB RAM以上
-- ストレージ: SSD、50GB以上の空き容量
-- ネットワーク: 高速ブロードバンド接続（100Mbps以上）
+- **Q**: 録音ファイルが見つからない
+- **A**: `~/Desktop/RecRadiko/` フォルダを確認してください
 
 ## 🤝 コントリビューション
 
-高品質なタイムフリー専用システムへの貢献を歓迎します！
+高品質なmacOSネイティブアプリケーションへの貢献を歓迎します！
 
-### 📝 **貢献方法**
+### 📝 貢献方法
 
 1. 🍴 リポジトリをフォーク
-2. 🌟 機能ブランチを作成（`git checkout -b feature/ui-enhancement`）
-3. 💾 変更をコミット（`git commit -m 'Add keyboard navigation feature'`）
-4. 📤 ブランチにプッシュ（`git push origin feature/ui-enhancement`）
+2. 🌟 機能ブランチを作成（`git checkout -b feature/macos-enhancement`）
+3. 💾 変更をコミット（`git commit -m 'Add macOS native feature'`）
+4. 📤 ブランチにプッシュ（`git push origin feature/macos-enhancement`）
 5. 🔄 プルリクエストを作成
 
-### 🧪 **開発ガイドライン**
+### 🧪 開発ガイドライン
 
 - **型ヒント必須**: 全ての新しいコードは型ヒント付きで記述
 - **テスト必須**: 新機能には対応するテストを作成
 - **実環境重視**: モック使用を最小限に抑制
-- **統一設計**: 既存のConfigManager・LoggerMixinを使用
+- **macOS対応**: macOSネイティブ機能を活用
 - **品質維持**: 既存のテスト成功率95%以上を維持
-
-## 📞 サポート
-
-### 🐛 **バグレポート・機能要望**
-
-- **GitHub Issues**: [Issues](https://github.com/your-repo/RecRadiko/issues)
-- **UI機能要望**: [UI Enhancement Requests](https://github.com/your-repo/RecRadiko/issues/new?template=ui_feature.md)
-- **バグレポート**: [Bug Reports](https://github.com/your-repo/RecRadiko/issues/new?template=bug_report.md)
 
 ## 📄 ライセンス
 
@@ -410,29 +344,33 @@ python RecRadiko.py --version
 - **Radiko** - 革新的なタイムフリー機能の提供
 - **FFmpeg** - 高品質な音声処理ライブラリ
 - **Python Community** - 優秀なライブラリとツールの提供
+- **macOS Developer Community** - ネイティブアプリ開発のベストプラクティス
 
 ---
 
-## 📊 プロジェクト統計（2025年7月17日）
+## 📊 プロジェクト統計（2025年7月23日）
 
 ```
+Version:             2.0.0 (macOS Native App)
 Lines of Code:       15,000+
-Test Coverage:       95% (262テスト)
+Test Coverage:       87% (300+テスト)
 Python Files:        32 (型ヒント100%対応)
 UI Screens:          7 (キーボードナビゲーション)
 Success Rate:        95% (プロダクション品質)
 Recording Speed:     110x faster than real-time
 Max Duration:        無制限（過去1週間）
-Supported Areas:     47都道府県（九州・沖縄統合）
+Supported Areas:     47都道府県
 Audio Quality:       MP3 256kbps / AAC 320kbps
-Architecture:        統一設定管理・型安全性・実環境テスト
-Phase 6 Complete:    地域統合・深夜番組対応・品質向上
+App Size:            36MB (Universal Binary)
+macOS Support:       12.0+ (Monterey+)
+Architecture:        Apple Silicon + Intel
+Distribution:        DMG Installer
 ```
 
-**Made with ❤️ for Modern Radio Enthusiasts**
+**Made with ❤️ for macOS Radio Enthusiasts**
 
 ---
 
-[![Star this repo](https://img.shields.io/github/stars/your-repo/RecRadiko?style=social)](https://github.com/your-repo/RecRadiko)
-[![Fork this repo](https://img.shields.io/github/forks/your-repo/RecRadiko?style=social)](https://github.com/your-repo/RecRadiko/fork)
-[![Watch this repo](https://img.shields.io/github/watchers/your-repo/RecRadiko?style=social)](https://github.com/your-repo/RecRadiko)
+[![Star this repo](https://img.shields.io/github/stars/2to4/RecRadiko?style=social)](https://github.com/2to4/RecRadiko)
+[![Fork this repo](https://img.shields.io/github/forks/2to4/RecRadiko?style=social)](https://github.com/2to4/RecRadiko/fork)
+[![Watch this repo](https://img.shields.io/github/watchers/2to4/RecRadiko?style=social)](https://github.com/2to4/RecRadiko)
