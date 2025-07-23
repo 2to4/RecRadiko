@@ -82,3 +82,64 @@ tmp/
 
 # ドキュメント生成
 docs/_build/
+
+# ==============================================================
+# macOSアプリケーション化関連（GitHub公開不適切ファイル）
+# ==============================================================
+
+# PyInstallerビルド出力
+build/
+dist/
+*.spec
+RecRadiko_signing.spec
+
+# DMGインストーラー（配布物）
+*.dmg
+dmg_contents/
+dmg_assets/
+rw.*.dmg
+
+# macOSアプリケーション署名・証明書関連
+entitlements.plist
+simple_entitlements.plist
+*.p12
+*.mobileprovision
+
+# アイコン作成中間ファイル
+assets/*.iconset/
+
+# 開発・テスト用スクリプト（本番環境外）
+debug_*.py
+/test_*.py
+debug_*.xml
+fix_*.py
+rebuild_*.py
+create_*.py
+build_*.py
+sign_*.py
+clean_*.py
+simple_*.py
+advanced_*.py
+update_*.py
+
+# テスト音声ファイル（サイズが大きく不要）
+test_timefree_*.mp3
+*.wav
+*.aac
+*.flac
+
+# 開発用依存関係
+requirements-dev.txt
+
+# ==============================================================
+# 追加の機密・個人情報ファイル
+# ==============================================================
+
+# 設定ファイル（個人の設定情報含む可能性）
+.claude/
+
+# インストールガイド（配布方法情報）
+*Installation_Guide.md
+
+# 実行時設定ファイル
+radiko.db

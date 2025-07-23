@@ -15,7 +15,10 @@
       "Bash(mv:*)",
       "Bash(git pull:*)",
       "Bash(ls:*)",
-      "Bash(ffmpeg:*)"
+      "Bash(ffmpeg:*)",
+      "Bash(sqlite3:*)",
+      "Bash(chmod:*)",
+      "Bash(otool:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
